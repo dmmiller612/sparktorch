@@ -50,7 +50,6 @@ def handle_features(data: List[DataObj]) -> DataObj:
     y_train = []
 
     for feature in data:
-
         if feature.y_train is not None:
             if type(feature.y_train) is int or type(feature.y_train) is float:
                 y_train.append([feature.y_train])

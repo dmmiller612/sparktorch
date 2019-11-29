@@ -26,18 +26,29 @@ from typing import Dict, List
 from uuid import uuid4
 
 
-def get_state_dict(master_url: str = 'localhost:3000') -> Dict:
-    r = requests.get('http://{0}/parameters'.format(master_url))
+def get_state_dict(master_url: str = 'localhost:3000', retry=True) -> Dict:
+    try:
+        r = requests.get('http://{0}/parameters'.format(master_url), timeout=10)
+    except Exception as e:
+        if retry:
+            r = requests.get('http://{0}/parameters'.format(master_url), timeout=10)
+        else:
+            raise e
+
     state_dict = dill.loads(r.content)
     return state_dict
 
 
-def put_deltas_to_server(delta: List, master_url: str = 'localhost:3000'):
-    requests.post('http://{0}/update'.format(master_url), data=dill.dumps(delta))
+def put_deltas_to_server(delta: List, master_url: str = 'localhost:3000', retry=True):
+    try:
+        requests.post('http://{0}/update'.format(master_url), data=dill.dumps(delta), timeout=10)
+    except Exception as e:
+        if retry:
+            requests.post('http://{0}/update'.format(master_url), data=dill.dumps(delta), timeout=10)
 
 
 def get_main(master_url: str = 'localhost:3000') -> str:
-    r = requests.get('http://{0}/'.format(master_url))
+    r = requests.get('http://{0}/'.format(master_url), timeout=3)
     return r.text
 
 
@@ -50,8 +61,7 @@ def handle_model(
 ):
 
     partition_id = str(uuid4())
-    data = list(data)
-    if data is None or len(data) == 0:
+    if data is None:
         return
 
     data_obj = handle_features(data)

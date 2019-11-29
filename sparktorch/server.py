@@ -36,7 +36,7 @@ class Server(object):
         torch_obj: TorchObj,
         master_url: str = None,
         port: int = 3000,
-        acquire_lock: bool = True
+        acquire_lock: bool = False
     ):
         self.torch_obj = load_torch_model(torch_obj)
 

@@ -62,7 +62,8 @@ class SparkTorchTests(PysparkTest):
             labelCol='label',
             predictionCol='predictions',
             torchObj=model,
-            iters=5
+            iters=5,
+            acquireLock=False
         ).fit(data)
 
         res = stm.transform(data).take(1)
@@ -81,7 +82,8 @@ class SparkTorchTests(PysparkTest):
             predictionCol='predictions',
             torchObj=model,
             iters=5,
-            verbose=1
+            verbose=1,
+            acquireLock=False
         ).fit(data)
 
         res = stm.transform(data).take(1)
@@ -129,6 +131,7 @@ class SparkTorchTests(PysparkTest):
 
         self.assertTrue('predictions' in res[0])
         self.assertTrue(len(res[0]['predictions']) == 10)
+
 
 if __name__ == '__main__':
     unittest.main()

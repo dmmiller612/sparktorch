@@ -5,6 +5,7 @@
 name: sparkflow
 channels:
 - https://repo.anaconda.com/pkgs/main/linux-64/
+- pytorch
 dependencies:
 # runtime
 - six=1.11.0
@@ -12,7 +13,7 @@ dependencies:
 - h5py=2.8.0
 - pillow=4.1.1
 - dill
-- torch
+- pytorch
 - flask
 - requests
 # test

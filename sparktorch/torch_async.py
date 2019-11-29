@@ -217,7 +217,7 @@ class SparkTorch(
         rdd = dataset.rdd.map(lambda x: handle_data(x, inp_col, label))
 
         if partitions > 0:
-            rdd = rdd.coalesce(partitions) if partitions < rdd.getNumPartitions() else rdd
+            rdd = rdd.repartition(partitions)
 
         if barrier:
             rdd = rdd.barrier()
