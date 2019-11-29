@@ -1,0 +1,29 @@
+# To choose a Python version, first create the env with:
+# conda create -n sparkflow python=3.6
+# and then update it
+# conda env update -n sparkflow -f environment.yml
+name: sparkflow
+channels:
+- https://repo.anaconda.com/pkgs/main/linux-64/
+dependencies:
+# runtime
+- six=1.11.0
+- pandas=0.23.4
+- h5py=2.8.0
+- pillow=4.1.1
+- dill
+- torch
+- flask
+- requests
+# test
+- coverage=4.5.1
+- nose=1.3.7
+- parameterized=0.6.1
+- pylint=1.8.4
+- argcomplete=1.9.4
+- PyYAML=3.13
+- pip:
+  # test
+  - prospector==0.12.11
+  - argh==0.26.2
+  - yapf==0.21.0
