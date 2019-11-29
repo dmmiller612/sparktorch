@@ -19,6 +19,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR TH
 
 from sparktorch.util import handle_features, load_torch_model, TorchObj, DataObj
 from sparktorch.server import Server
+from pyspark.rdd import RDD
 import requests
 import dill
 from typing import Dict, List
@@ -56,7 +57,7 @@ def handle_model(
     data_obj = handle_features(data)
 
     x_train = data_obj.x_train
-    y_train = data_obj.y_train
+    y_train = data_obj.y_train if data_obj.y_train is not None else x_train
 
     torch_obj = load_torch_model(torch_obj)
 
@@ -82,9 +83,11 @@ def handle_model(
         if verbose:
             print(f"Partition: {partition_id}. Iteration: {i}. Loss: {loss.item()}")
 
+    return "finished"
+
 
 def train(
-    rdd,
+    rdd: RDD,
     torch_obj: TorchObj,
     server: Server,
     iters: int = 10,
@@ -95,9 +98,9 @@ def train(
         master_url = str(server.master_url)
 
         for i in range(partition_shuffles):
-            rdd.foreachPartition(
+            rdd.mapPartitions(
                 lambda x: handle_model(x, torch_obj=torch_obj, master_url=master_url, iters=iters, verbose=verbose)
-            )
+            ).foreach(lambda x: x)
 
             if partition_shuffles - i > 1:
                 num_partitions = rdd.getNumPartitions()

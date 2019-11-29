@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch
 from sparktorch.util import serialize_torch_obj
 from sparktorch.torch_async import SparkTorch
-from tests.simple_net import Net
+from tests.simple_net import Net, AutoEncoder
 
 
 class PysparkTest(unittest.TestCase):
@@ -88,6 +88,47 @@ class SparkTorchTests(PysparkTest):
         self.assertTrue('predictions' in res[0])
         self.assertTrue(len(res[0]['predictions']) == 1)
 
+    def test_barrier(self):
+        model = serialize_torch_obj(
+            Net(), nn.MSELoss(), torch.optim.Adam, lr=0.001
+        )
+        data = self.generate_random_data().repartition(2)
+
+        stm = SparkTorch(
+            inputCol='features',
+            labelCol='label',
+            predictionCol='predictions',
+            torchObj=model,
+            iters=5,
+            verbose=1,
+            partitions=2,
+            useBarrier=True
+        ).fit(data)
+
+        res = stm.transform(data).take(1)
+
+        self.assertTrue('predictions' in res[0])
+        self.assertTrue(len(res[0]['predictions']) == 1)
+
+    def test_autoencoder(self):
+        model = serialize_torch_obj(
+            AutoEncoder(), nn.MSELoss(), torch.optim.Adam, lr=0.001
+        )
+        data = self.generate_random_data().repartition(2)
+
+        stm = SparkTorch(
+            inputCol='features',
+            predictionCol='predictions',
+            torchObj=model,
+            iters=5,
+            verbose=1,
+            partitions=2,
+            useBarrier=True
+        ).fit(data)
+        res = stm.transform(data).take(1)
+
+        self.assertTrue('predictions' in res[0])
+        self.assertTrue(len(res[0]['predictions']) == 10)
 
 if __name__ == '__main__':
     unittest.main()

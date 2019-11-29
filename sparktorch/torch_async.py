@@ -40,9 +40,10 @@ from pyspark import SparkContext
 
 
 def handle_data(data, inp_col, label_col):
+    y_train = data[label_col] if label_col else None
     return DataObj(
         np.asarray(data[inp_col]),
-        data[label_col],
+        y_train,
         None,
         None
     )
@@ -116,6 +117,7 @@ class SparkTorch(
     shufflePerIter = Param(Params._dummy(), "shufflePerIter", "", typeConverter=TypeConverters.toBoolean)
     partitionShuffles = Param(Params._dummy(), "partitionShuffles", "", typeConverter=TypeConverters.toInt)
     port = Param(Params._dummy(), "port", "", typeConverter=TypeConverters.toInt)
+    useBarrier = Param(Params._dummy(), "useBarrier", "", typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(
@@ -130,7 +132,8 @@ class SparkTorch(
         shufflePerIter=None,
         verbose=None,
         partitionShuffles=None,
-        port=None
+        port=None,
+        useBarrier=None
     ):
         super().__init__()
         self._setDefault(
@@ -144,7 +147,8 @@ class SparkTorch(
             shufflePerIter=True,
             verbose=0,
             partitionShuffles=1,
-            port=3000
+            port=3000,
+            useBarrier=False
         )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -162,7 +166,8 @@ class SparkTorch(
         shufflePerIter=None,
         verbose=None,
         partitionShuffles=None,
-        port=None
+        port=None,
+        useBarrier=None
     ):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -191,6 +196,9 @@ class SparkTorch(
     def getPort(self):
         return self.getOrDefault(self.port)
 
+    def getBarrier(self):
+        return self.getOrDefault(self.useBarrier)
+
     def _fit(self, dataset):
         inp_col = self.getInputCol()
         label = self.getLabelCol()
@@ -204,10 +212,15 @@ class SparkTorch(
         spi = self.getShufflePerIter()
         partition_shuffles = self.getPartitionShuffles()
         port = self.getPort()
+        barrier = self.getBarrier()
 
-        df = dataset.rdd.map(lambda x: handle_data(x, inp_col, label))
+        rdd = dataset.rdd.map(lambda x: handle_data(x, inp_col, label))
+
         if partitions > 0:
-            df = df.coalesce(partitions) if partitions < df.getNumPartitions() else df
+            rdd = rdd.coalesce(partitions) if partitions < rdd.getNumPartitions() else rdd
+
+        if barrier:
+            rdd = rdd.barrier()
 
         master_url = SparkContext._active_spark_context.getConf().get("spark.driver.host").__str__() + ":" + str(port)
         server = Server(
@@ -221,7 +234,7 @@ class SparkTorch(
         time.sleep(5)
         print(f'Server is running {get_main(master_url)}')
 
-        state_dict = train(df, torch_obj, server, iters, partition_shuffles, verbose=verbose)
+        state_dict = train(rdd, torch_obj, server, iters, partition_shuffles, verbose=verbose)
         loaded = load_torch_model(torch_obj)
         model = loaded.model
         model.load_state_dict(state_dict)

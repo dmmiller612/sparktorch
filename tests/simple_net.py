@@ -14,3 +14,23 @@ class Net(nn.Module):
         x = F.relu(x)
         x = self.fc2(x)
         return x
+
+
+class AutoEncoder(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(10, 5)
+        self.bottle = nn.Linear(5, 2)
+        self.fc2 = nn.Linear(2, 5)
+        self.out = nn.Linear(5, 10)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = F.relu(x)
+        x = self.bottle(x)
+        x = F.relu(x)
+        x = self.fc2(x)
+        x = F.relu(x)
+        x = self.out(x)
+        return x
