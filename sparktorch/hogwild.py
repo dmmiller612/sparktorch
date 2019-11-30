@@ -48,6 +48,14 @@ def put_deltas_to_server(delta: List, master_url: str = 'localhost:3000', retry=
             requests.post('http://{0}/update'.format(master_url), data=dill.dumps(delta), timeout=10)
 
 
+def put_early_stop(loss, master_url: str = 'localhost:3000', retry=True):
+    try:
+        return requests.post('http://{0}/losses'.format(master_url), json={'loss': loss}, timeout=10).json()
+    except Exception as e:
+        if retry:
+            return requests.post('http://{0}/losses'.format(master_url), json={'loss': loss}, timeout=10).json()
+
+
 def get_main(master_url: str = 'localhost:3000') -> str:
     r = requests.get('http://{0}/'.format(master_url), timeout=3)
     return r.text
@@ -58,7 +66,8 @@ def handle_model(
     torch_obj: TorchObj,
     master_url: str = 'localhost:3000',
     iters: int = 1000,
-    verbose: int = 1
+    verbose: int = 1,
+    early_stop_patience: int = -1
 ):
 
     partition_id = str(uuid4())
@@ -95,10 +104,16 @@ def handle_model(
         for param in model.parameters():
             gradients.append(param.grad)
 
-        put_deltas_to_server(gradients)
+        put_deltas_to_server(gradients, master_url)
 
+        loss_v = loss.item()
         if verbose:
-            print(f"Partition: {partition_id}. Iteration: {i}. Loss: {loss.item()}")
+            print(f"Partition: {partition_id}. Iteration: {i}. Loss: {loss_v}")
+
+        if early_stop_patience > 0:
+            should_stop = put_early_stop(loss_v, master_url)
+            if should_stop['stop']:
+                break
 
     return "finished"
 
@@ -109,14 +124,22 @@ def train(
     server: Server,
     iters: int = 10,
     partition_shuffles: int = 1,
-    verbose: int = 1
+    verbose: int = 1,
+    early_stop_patience: int = -1
 ) -> Dict:
     try:
         master_url = str(server.master_url)
 
         for i in range(partition_shuffles):
             rdd.mapPartitions(
-                lambda x: handle_model(x, torch_obj=torch_obj, master_url=master_url, iters=iters, verbose=verbose)
+                lambda x: handle_model(
+                    x,
+                    torch_obj=torch_obj,
+                    master_url=master_url,
+                    iters=iters,
+                    verbose=verbose,
+                    early_stop_patience=early_stop_patience
+                )
             ).foreach(lambda x: x)
 
             if partition_shuffles - i > 1:

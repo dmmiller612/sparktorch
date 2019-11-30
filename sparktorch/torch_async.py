@@ -143,6 +143,7 @@ class SparkTorch(
     port = Param(Params._dummy(), "port", "", typeConverter=TypeConverters.toInt)
     useBarrier = Param(Params._dummy(), "useBarrier", "", typeConverter=TypeConverters.toBoolean)
     useVectorOut = Param(Params._dummy(), "useVectorOut", "", typeConverter=TypeConverters.toBoolean)
+    earlyStopPatience = Param(Params._dummy(), "earlyStopPatience", "", typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(
@@ -159,7 +160,8 @@ class SparkTorch(
         partitionShuffles=None,
         port=None,
         useBarrier=None,
-        useVectorOut=None
+        useVectorOut=None,
+        earlyStopPatience=None
     ):
         super().__init__()
         self._setDefault(
@@ -175,7 +177,8 @@ class SparkTorch(
             partitionShuffles=1,
             port=3000,
             useBarrier=False,
-            useVectorOut=False
+            useVectorOut=False,
+            earlyStopPatience=-1
         )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -195,13 +198,17 @@ class SparkTorch(
         partitionShuffles=None,
         port=None,
         useBarrier=None,
-        useVectorOut=None
+        useVectorOut=None,
+        earlyStopPatience=None
     ):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def getTorchObj(self):
         return self.getOrDefault(self.torchObj)
+
+    def getEarlyStopPatience(self):
+        return self.getOrDefault(self.earlyStopPatience)
 
     def getIters(self):
         return self.getOrDefault(self.iters)
@@ -245,6 +252,7 @@ class SparkTorch(
         port = self.getPort()
         barrier = self.getBarrier()
         use_vector_out = self.getVectorOut()
+        early_stop_patience = self.getEarlyStopPatience()
 
         rdd = dataset.rdd.mapPartitions(handle_data(inp_col, label))
 
@@ -259,14 +267,20 @@ class SparkTorch(
             torch_obj=torch_obj,
             master_url=master_url,
             port=port,
-            acquire_lock=acquire_lock
+            acquire_lock=acquire_lock,
+            early_stop_patience=early_stop_patience
         )
 
         server.start_server()
         time.sleep(5)
         print(f'Server is running {get_main(master_url)}')
 
-        state_dict = train(rdd, torch_obj, server, iters, partition_shuffles, verbose=verbose)
+        state_dict = train(
+            rdd, torch_obj, server, iters,
+            partition_shuffles, verbose=verbose,
+            early_stop_patience=early_stop_patience
+        )
+
         loaded = load_torch_model(torch_obj)
         model = loaded.model
         model.load_state_dict(state_dict)
