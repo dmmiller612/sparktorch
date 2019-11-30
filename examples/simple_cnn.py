@@ -1,12 +1,13 @@
 from pyspark.sql import SparkSession
-from pyspark.ml.feature import VectorAssembler, OneHotEncoder
-from sparktorch import SparkTorch, PysparkPipelineWrapper, serialize_torch_obj
+from pyspark.ml.feature import VectorAssembler
+from sparktorch import SparkTorch, serialize_torch_obj
 from pyspark.sql.functions import rand
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.ml.pipeline import Pipeline, PipelineModel
 from sparktorch import PysparkPipelineWrapper
 import torch
 import torch.nn as nn
+from examples.cnn_network import Net
 
 
 if __name__ == '__main__':
@@ -18,14 +19,8 @@ if __name__ == '__main__':
     # Read in mnist_train.csv dataset
     df = spark.read.option("inferSchema", "true").csv('mnist_train.csv').orderBy(rand()).coalesce(4)
 
-    network = nn.Sequential(
-        nn.Linear(784, 128),
-        nn.ReLU(),
-        nn.Linear(128, 96),
-        nn.ReLU(),
-        nn.Linear(96, 10),
-        nn.Softmax(dim=1)
-    )
+    # Load network. NOTE: Due to pytorch pickling issues, this needs to be in a separate file
+    network = Net()
 
     # Build the pytorch object
     torch_obj = serialize_torch_obj(
@@ -53,10 +48,10 @@ if __name__ == '__main__':
 
     # Create and save the Pipeline
     p = Pipeline(stages=[vector_assembler, spark_model]).fit(df)
-    p.save('simple_dnn')
+    p.save('simple_cnn')
 
     # Example of loading the pipeline
-    loaded_pipeline = PysparkPipelineWrapper.unwrap(PipelineModel.load('simple_dnn'))
+    loaded_pipeline = PysparkPipelineWrapper.unwrap(PipelineModel.load('simple_cnn'))
 
     # Run predictions and evaluation
     predictions = loaded_pipeline.transform(df)

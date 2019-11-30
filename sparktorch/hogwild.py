@@ -24,6 +24,7 @@ import requests
 import dill
 from typing import Dict, List
 from uuid import uuid4
+import torch
 
 
 def get_state_dict(master_url: str = 'localhost:3000', retry=True) -> Dict:
@@ -81,7 +82,13 @@ def handle_model(
         model.load_state_dict(state_dict)
 
         y_pred = model(x_train)
-        loss = criterion(y_pred, y_train)
+
+        try:
+            loss = criterion(y_pred, y_train)
+        except RuntimeError as e:
+            y_train = torch.flatten(y_train.long())
+            loss = criterion(y_pred, y_train)
+
         loss.backward()
 
         gradients = []

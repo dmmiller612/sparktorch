@@ -34,3 +34,18 @@ class AutoEncoder(nn.Module):
         x = F.relu(x)
         x = self.out(x)
         return x
+
+
+class ClassificationNet(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(10, 20)
+        self.fc2 = nn.Linear(20, 2)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = F.relu(x)
+        x = self.fc2(x)
+        output = F.log_softmax(x, dim=1)
+        return output

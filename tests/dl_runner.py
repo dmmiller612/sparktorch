@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch
 from sparktorch.util import serialize_torch_obj
 from sparktorch.torch_async import SparkTorch
-from tests.simple_net import Net, AutoEncoder
+from tests.simple_net import Net, AutoEncoder, ClassificationNet
 
 
 class PysparkTest(unittest.TestCase):
@@ -68,7 +68,7 @@ class SparkTorchTests(PysparkTest):
 
         res = stm.transform(data).take(1)
         self.assertTrue('predictions' in res[0])
-        self.assertTrue(len(res[0]['predictions']) == 1)
+        self.assertTrue(type(res[0]['predictions']) is float)
 
     def test_simple_torch_module(self):
         model = serialize_torch_obj(
@@ -88,7 +88,7 @@ class SparkTorchTests(PysparkTest):
 
         res = stm.transform(data).take(1)
         self.assertTrue('predictions' in res[0])
-        self.assertTrue(len(res[0]['predictions']) == 1)
+        self.assertTrue(type(res[0]['predictions']) is float)
 
     def test_barrier(self):
         model = serialize_torch_obj(
@@ -110,12 +110,13 @@ class SparkTorchTests(PysparkTest):
         res = stm.transform(data).take(1)
 
         self.assertTrue('predictions' in res[0])
-        self.assertTrue(len(res[0]['predictions']) == 1)
+        self.assertTrue(type(res[0]['predictions']) is float)
 
     def test_autoencoder(self):
         model = serialize_torch_obj(
             AutoEncoder(), nn.MSELoss(), torch.optim.Adam, lr=0.001
         )
+
         data = self.generate_random_data().repartition(2)
 
         stm = SparkTorch(
@@ -125,12 +126,36 @@ class SparkTorchTests(PysparkTest):
             iters=5,
             verbose=1,
             partitions=2,
-            useBarrier=True
+            useBarrier=True,
+            useVectorOut=True
         ).fit(data)
+
         res = stm.transform(data).take(1)
 
         self.assertTrue('predictions' in res[0])
         self.assertTrue(len(res[0]['predictions']) == 10)
+
+    def test_classification(self):
+        model = serialize_torch_obj(
+            ClassificationNet(), nn.CrossEntropyLoss(), torch.optim.Adam, lr=0.001
+        )
+        data = self.generate_random_data().repartition(2)
+
+        stm = SparkTorch(
+            inputCol='features',
+            labelCol='label',
+            predictionCol='predictions',
+            torchObj=model,
+            iters=5,
+            verbose=1,
+            partitions=2,
+            useBarrier=True
+        ).fit(data)
+
+        res = stm.transform(data).take(1)
+
+        self.assertTrue('predictions' in res[0])
+        self.assertTrue(type(res[0]['predictions']) is float)
 
 
 if __name__ == '__main__':

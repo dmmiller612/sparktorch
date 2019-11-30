@@ -33,6 +33,7 @@ from pyspark.ml.util import Identifiable, MLReadable, MLWritable
 from pyspark import keyword_only
 import time
 from pyspark.ml.linalg import Vectors, VectorUDT
+from pyspark.sql.types import DoubleType
 from pyspark.sql import functions as F
 import dill
 
@@ -52,19 +53,22 @@ def handle_data(data, inp_col, label_col):
 class SparkTorchModel(Model, HasInputCol, HasPredictionCol, PysparkReaderWriter, MLReadable, MLWritable, Identifiable):
 
     modStr = Param(Params._dummy(), "modStr", "", typeConverter=TypeConverters.toString)
+    useVectorOut = Param(Params._dummy(), "useVectorOut", "", typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(
         self,
         inputCol=None,
         predictionCol=None,
-        modStr=None
+        modStr=None,
+        useVectorOut=None
     ):
         super().__init__()
         self._setDefault(
             inputCol='encoded',
             predictionCol='predicted',
-            modStr=''
+            modStr='',
+            useVectorOut=False
         )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -74,7 +78,8 @@ class SparkTorchModel(Model, HasInputCol, HasPredictionCol, PysparkReaderWriter,
         self,
         inputCol=None,
         predictionCol=None,
-        modStr=None
+        modStr=None,
+        useVectorOut=None
     ):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -83,17 +88,32 @@ class SparkTorchModel(Model, HasInputCol, HasPredictionCol, PysparkReaderWriter,
         inp = self.getOrDefault(self.inputCol)
         out = self.getOrDefault(self.predictionCol)
         mod_str = self.getOrDefault(self.modStr)
+        use_vector_out = self.getOrDefault(self.useVectorOut)
+
         model = dill.loads(codecs.decode(mod_str.encode(), "base64"))
         model_broadcast = dataset._sc.broadcast(model)
 
-        def predict_func(data):
+        def predict_vec(data):
             features = np.asarray(data).reshape((1, len(data)))
             x_data = torch.from_numpy(features).float()
             model = model_broadcast.value
             model.eval()
             return Vectors.dense(model(x_data).detach().numpy().flatten())
 
-        udfGenerateCode = F.udf(predict_func, VectorUDT())
+        def predict_float(data):
+            features = np.asarray(data).reshape((1, len(data)))
+            x_data = torch.from_numpy(features).float()
+            model = model_broadcast.value
+            model.eval()
+            raw_prediction = model(x_data).detach().numpy().flatten()
+            if len(raw_prediction) > 1:
+                return float(np.argmax(raw_prediction))
+            return float(raw_prediction[0])
+
+        if use_vector_out:
+            udfGenerateCode = F.udf(predict_vec, VectorUDT())
+        else:
+            udfGenerateCode = F.udf(predict_float, DoubleType())
 
         return dataset.withColumn(out, udfGenerateCode(inp))
 
@@ -118,6 +138,7 @@ class SparkTorch(
     partitionShuffles = Param(Params._dummy(), "partitionShuffles", "", typeConverter=TypeConverters.toInt)
     port = Param(Params._dummy(), "port", "", typeConverter=TypeConverters.toInt)
     useBarrier = Param(Params._dummy(), "useBarrier", "", typeConverter=TypeConverters.toBoolean)
+    useVectorOut = Param(Params._dummy(), "useVectorOut", "", typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(
@@ -133,7 +154,8 @@ class SparkTorch(
         verbose=None,
         partitionShuffles=None,
         port=None,
-        useBarrier=None
+        useBarrier=None,
+        useVectorOut=None
     ):
         super().__init__()
         self._setDefault(
@@ -148,7 +170,8 @@ class SparkTorch(
             verbose=0,
             partitionShuffles=1,
             port=3000,
-            useBarrier=False
+            useBarrier=False,
+            useVectorOut=False
         )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -167,7 +190,8 @@ class SparkTorch(
         verbose=None,
         partitionShuffles=None,
         port=None,
-        useBarrier=None
+        useBarrier=None,
+        useVectorOut=None
     ):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -199,6 +223,9 @@ class SparkTorch(
     def getBarrier(self):
         return self.getOrDefault(self.useBarrier)
 
+    def getVectorOut(self):
+        return self.getOrDefault(self.useVectorOut)
+
     def _fit(self, dataset):
         inp_col = self.getInputCol()
         label = self.getLabelCol()
@@ -213,6 +240,7 @@ class SparkTorch(
         partition_shuffles = self.getPartitionShuffles()
         port = self.getPort()
         barrier = self.getBarrier()
+        use_vector_out = self.getVectorOut()
 
         rdd = dataset.rdd.map(lambda x: handle_data(x, inp_col, label))
 
@@ -243,5 +271,6 @@ class SparkTorch(
         return SparkTorchModel(
             inputCol=inp_col,
             predictionCol=prediction,
-            modStr=dumped_model
+            modStr=dumped_model,
+            useVectorOut=use_vector_out
         )
