@@ -23,6 +23,7 @@ from flask import Flask, request
 import dill
 from sparktorch.util import load_torch_model, TorchObj
 from sparktorch.rw_lock import RWLock
+from sparktorch.early_stopper import EarlyStopping
 
 import logging
 log = logging.getLogger('werkzeug')
@@ -36,7 +37,8 @@ class Server(object):
         torch_obj: TorchObj,
         master_url: str = None,
         port: int = 3000,
-        acquire_lock: bool = False
+        acquire_lock: bool = False,
+        early_stop_patience=1
     ):
         self.torch_obj = load_torch_model(torch_obj)
 
@@ -50,7 +52,10 @@ class Server(object):
         self.port = port
         self.error_count = 0
         self.acquire_lock = acquire_lock
-
+        self.window_len = 4
+        self.loss_window = []
+        self.should_stop = False
+        self.early_stop_patience=early_stop_patience
         self.server = Process(target=self.start_service)
 
     @staticmethod
@@ -75,6 +80,8 @@ class Server(object):
         self.model.train()
         lock = RWLock()
         lock_acquired = self.acquire_lock
+        window_len = self.window_len
+        early_stopper = EarlyStopping(patience=max(self.early_stop_patience, 1))
 
         @app.route('/')
         def home():
@@ -88,6 +95,29 @@ class Server(object):
             if lock_acquired:
                 lock.release()
             return state
+
+        @app.route('/losses', methods=['POST'])
+        def process_loss():
+            if self.should_stop:
+                return {
+                    'stop': True
+                }
+
+            loss = request.json['loss']
+            self.loss_window.append(loss)
+
+            if len(self.loss_window) > window_len:
+                loss = sum(self.loss_window) / len(self.loss_window)
+                self.loss_window = []
+                if early_stopper.step(loss):
+                    self.should_stop=True
+                    return {
+                        "stop": True
+                    }
+
+            return {
+                "stop": False
+            }
 
         @app.route('/update', methods=['POST'])
         def update_parameters():

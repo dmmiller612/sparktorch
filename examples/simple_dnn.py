@@ -46,6 +46,7 @@ if __name__ == '__main__':
         iters=100,
         partitions=2,
         verbose=1,
+        earlyStopPatience=10,
         useBarrier=True
     )
 
