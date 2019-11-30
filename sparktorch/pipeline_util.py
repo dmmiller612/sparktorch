@@ -39,6 +39,7 @@ def load_byte_array(stop_words):
         dmp = zlib.decompress(dmp)
         py_obj = dill.loads(dmp)
         return py_obj
+
     dmp = bytes([int(i) for i in swords])
     dmp = zlib.decompress(dmp)
     py_obj = dill.loads(dmp)
@@ -60,8 +61,10 @@ class PysparkPipelineWrapper(object):
 
         stages = pipeline.getStages() if isinstance(pipeline, Pipeline) else pipeline.stages
         for i, stage in enumerate(stages):
+
             if (isinstance(stage, Pipeline) or isinstance(stage, PipelineModel)):
                 stages[i] = PysparkPipelineWrapper.unwrap(stage)
+
             if isinstance(stage, PysparkObjId._getCarrierClass()) and stage.getStopWords()[-1] == PysparkObjId._getPyObjId():
                 swords = stage.getStopWords()[:-1] # strip the id
                 py_obj = load_byte_array(swords)

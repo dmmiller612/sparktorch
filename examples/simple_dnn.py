@@ -20,9 +20,9 @@ if __name__ == '__main__':
 
     network = nn.Sequential(
         nn.Linear(784, 256),
-        nn.ReLU(),
+        nn.Softplus(),
         nn.Linear(256, 256),
-        nn.ReLU(),
+        nn.Softplus(),
         nn.Linear(256, 10),
         nn.Softmax(dim=1)
     )
@@ -31,7 +31,7 @@ if __name__ == '__main__':
     torch_obj = serialize_torch_obj(
         model=network,
         criterion=nn.CrossEntropyLoss(),
-        optimizer=torch.optim.Adam,
+        optimizer=torch.optim.SGD,
         lr=0.00005
     )
 

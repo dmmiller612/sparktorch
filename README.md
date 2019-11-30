@@ -5,9 +5,25 @@ in using Torch on Spark. With SparkTorch, you can easily integrate your deep lea
 Underneath, SparkTorch uses a parameter server to train the Pytorch network in a distributed manner. Through the api,
 the user can specify the style of training, whether that is Hogwild or async with locking.
 
+## Why should I use this?
+
+Like SparkFlow, SparkTorch's main objective is to seamlessly work with Spark's ML Pipelines. This library provides three 
+core components:
+
+* Distributed training for large datasets. Multiple Pytorch models are ran in parallel with one central network that 
+manages weights. This is useful for training very large datasets that do not fit into a single machine.
+* Full integration with Spark's ML library. This ensures that you can save and load pipelines with your trained model.
+* Inference. With SparkTorch, you can load your existing trained model and run inference on billions of records 
+in parallel. 
+
+On top of these features, SparkTorch can utilize barrier execution, ensuring that all executors run currently during 
+training. 
+
 ## Install
 
-`pip install sparktorch`
+Install SparkTorch via pip: `pip install sparktorch`
+
+SparkTorch requires Apache Spark >= 2.4.4, and has only been tested on PyTorch versions >= 1.2.0.
 
 ## Full Basic Example
 
