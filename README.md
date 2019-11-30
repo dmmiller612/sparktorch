@@ -42,7 +42,7 @@ torch_obj = serialize_torch_obj(
 # Setup features
 vector_assembler = VectorAssembler(inputCols=df.columns[1:785], outputCol='features')
 
-# Create a SparkTorch Model
+# Create a SparkTorch Model with barrier execution
 spark_model = SparkTorch(
     inputCol='features',
     labelCol='_c0',
