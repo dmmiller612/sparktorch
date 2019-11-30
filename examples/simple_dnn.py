@@ -19,9 +19,9 @@ if __name__ == '__main__':
 
     network = nn.Sequential(
         nn.Linear(784, 256),
-        nn.Softplus(),
+        nn.ReLU(),
         nn.Linear(256, 256),
-        nn.Softplus(),
+        nn.ReLU(),
         nn.Linear(256, 10)
     )
 
@@ -29,8 +29,8 @@ if __name__ == '__main__':
     torch_obj = serialize_torch_obj(
         model=network,
         criterion=nn.CrossEntropyLoss(),
-        optimizer=torch.optim.SGD,
-        lr=0.00005
+        optimizer=torch.optim.Adam,
+        lr=0.00001
     )
 
     # Setup features
@@ -43,34 +43,23 @@ if __name__ == '__main__':
         labelCol='_c0',
         predictionCol='predictions',
         torchObj=torch_obj,
-        iters=10,
+        iters=100,
         partitions=2,
         verbose=1,
-        useBarrier=True,
-        acquireLock=True
+        useBarrier=True
     )
 
     # Create and save the Pipeline
     p = Pipeline(stages=[vector_assembler, spark_model]).fit(df)
     p.save('simple_dnn')
 
-    import time
-
-    start = time.time()
     # Example of loading the pipeline
     loaded_pipeline = PysparkPipelineWrapper.unwrap(PipelineModel.load('simple_dnn'))
-    end = time.time()
-    print(f'it took {end-start} time to load model')
 
-    start = time.time()
     # Run predictions and evaluation
-    predictions = loaded_pipeline.transform(df).collect()
-    end = time.time()
-    print(f'it took {end-start} time to run evaluation')
-    #print("Test Error = %g" % (1.0 - accuracy))
-    """
+    predictions = loaded_pipeline.transform(df).persist()
     evaluator = MulticlassClassificationEvaluator(
         labelCol="_c0", predictionCol="predictions", metricName="accuracy")
     accuracy = evaluator.evaluate(predictions)
+    print("Train Error = %g" % (1.0 - accuracy))
 
-    """
