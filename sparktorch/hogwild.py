@@ -63,7 +63,7 @@ def get_main(master_url: str = 'localhost:3000') -> str:
 
 def handle_model(
     data: List[DataObj],
-    torch_obj: TorchObj,
+    torch_obj: str,
     master_url: str = 'localhost:3000',
     iters: int = 1000,
     verbose: int = 1,

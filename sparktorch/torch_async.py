@@ -259,6 +259,8 @@ class SparkTorch(
         if partitions > 0:
             rdd = rdd.repartition(partitions)
 
+        partitions = partitions if partitions else rdd.getNumPartitions()
+
         if barrier:
             rdd = rdd.barrier()
 
@@ -268,7 +270,8 @@ class SparkTorch(
             master_url=master_url,
             port=port,
             acquire_lock=acquire_lock,
-            early_stop_patience=early_stop_patience
+            early_stop_patience=early_stop_patience,
+            window_len=partitions
         )
 
         server.start_server()
