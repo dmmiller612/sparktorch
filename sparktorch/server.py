@@ -38,7 +38,8 @@ class Server(object):
         master_url: str = None,
         port: int = 3000,
         acquire_lock: bool = False,
-        early_stop_patience=1
+        early_stop_patience:int = 1,
+        window_len: int = 4
     ):
         self.torch_obj = load_torch_model(torch_obj)
 
@@ -52,7 +53,7 @@ class Server(object):
         self.port = port
         self.error_count = 0
         self.acquire_lock = acquire_lock
-        self.window_len = 4
+        self.window_len = window_len
         self.loss_window = []
         self.should_stop = False
         self.early_stop_patience=early_stop_patience
