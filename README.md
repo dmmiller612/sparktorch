@@ -5,44 +5,58 @@ in using Torch on Spark. With SparkTorch, you can easily integrate your deep lea
 Underneath, SparkTorch uses a parameter server to train the Pytorch network in a distributed manner. Through the api,
 the user can specify the style of training, whether that is Hogwild or async with locking.
 
-
 ## Install
 
 `pip install sparktorch`
 
-## Basic Example
+## Full Basic Example
 
 ```python
-from sparktorch.util import serialize_torch_obj
-from sparktorch.torch_async import SparkTorch
+from sparktorch import serialize_torch_obj, SparkTorch
 import torch
 import torch.nn as nn
+from pyspark.ml.feature import VectorAssembler
+from pyspark.sql import SparkSession
+from pyspark.ml.pipeline import Pipeline
 
-#Spark dataframe
-dataframe = spark.createDataFrame(data, ["label", "features"])
+spark = SparkSession.builder.appName("examples").master('local[4]').getOrCreate()
+df = spark.read.option("inferSchema", "true").csv('mnist_train.csv').coalesce(4)
 
-# serialize object
-model = serialize_torch_obj(
-    nn.Sequential(
-        nn.Linear(10, 20),
-        nn.ReLU(),
-        nn.Linear(20, 1)
-    ), 
-    nn.MSELoss(), 
-    torch.optim.Adam, 
-    lr=0.001
+network = nn.Sequential(
+    nn.Linear(784, 256),
+    nn.ReLU(),
+    nn.Linear(256, 256),
+    nn.ReLU(),
+    nn.Linear(256, 10),
+    nn.Softmax(dim=1)
 )
 
-# SparkTorch Model
-stm = SparkTorch(
-    inputCol='features',
-    labelCol='label',
-    predictionCol='predictions',
-    torchObj=model,
-    iters=5
-).fit(dataframe)
+# Build the pytorch object
+torch_obj = serialize_torch_obj(
+    model=network,
+    criterion=nn.CrossEntropyLoss(),
+    optimizer=torch.optim.Adam,
+    lr=0.0001
+)
 
-results = stm.transform(dataframe)
+# Setup features
+vector_assembler = VectorAssembler(inputCols=df.columns[1:785], outputCol='features')
+
+# Create a SparkTorch Model
+spark_model = SparkTorch(
+    inputCol='features',
+    labelCol='_c0',
+    predictionCol='predictions',
+    torchObj=torch_obj,
+    iters=50,
+    partitions=4,
+    verbose=1,
+    useBarrier=True
+)
+
+# Can be used in a pipeline and saved.
+p = Pipeline(stages=[vector_assembler, spark_model]).fit(df)
+p.save('simple_dnn')
 ```
 
 

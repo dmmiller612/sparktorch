@@ -1,6 +1,6 @@
 from pyspark.sql import SparkSession
-from pyspark.ml.feature import VectorAssembler, OneHotEncoder
-from sparktorch import SparkTorch, PysparkPipelineWrapper, serialize_torch_obj
+from pyspark.ml.feature import VectorAssembler
+from sparktorch import SparkTorch, serialize_torch_obj
 from pyspark.sql.functions import rand
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.ml.pipeline import Pipeline, PipelineModel
@@ -19,11 +19,11 @@ if __name__ == '__main__':
     df = spark.read.option("inferSchema", "true").csv('mnist_train.csv').orderBy(rand()).coalesce(4)
 
     network = nn.Sequential(
-        nn.Linear(784, 128),
+        nn.Linear(784, 256),
         nn.ReLU(),
-        nn.Linear(128, 96),
+        nn.Linear(256, 256),
         nn.ReLU(),
-        nn.Linear(96, 10),
+        nn.Linear(256, 10),
         nn.Softmax(dim=1)
     )
 

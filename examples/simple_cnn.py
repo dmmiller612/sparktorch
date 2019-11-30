@@ -11,6 +11,7 @@ from examples.cnn_network import Net
 
 
 if __name__ == '__main__':
+
     spark = SparkSession.builder \
         .appName("examples") \
         .master('local[4]').config('spark.driver.memory', '2g') \
