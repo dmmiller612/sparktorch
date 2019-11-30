@@ -138,12 +138,12 @@ class SparkTorch(
     partitions = Param(Params._dummy(), "partitions", "", typeConverter=TypeConverters.toInt)
     verbose = Param(Params._dummy(), "verbose", "", typeConverter=TypeConverters.toInt)
     acquireLock = Param(Params._dummy(), "acquireLock", "", typeConverter=TypeConverters.toBoolean)
-    shufflePerIter = Param(Params._dummy(), "shufflePerIter", "", typeConverter=TypeConverters.toBoolean)
     partitionShuffles = Param(Params._dummy(), "partitionShuffles", "", typeConverter=TypeConverters.toInt)
     port = Param(Params._dummy(), "port", "", typeConverter=TypeConverters.toInt)
     useBarrier = Param(Params._dummy(), "useBarrier", "", typeConverter=TypeConverters.toBoolean)
     useVectorOut = Param(Params._dummy(), "useVectorOut", "", typeConverter=TypeConverters.toBoolean)
     earlyStopPatience = Param(Params._dummy(), "earlyStopPatience", "", typeConverter=TypeConverters.toInt)
+    miniBatch = Param(Params._dummy(), "miniBatch", "", typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(
@@ -155,13 +155,13 @@ class SparkTorch(
         predictionCol=None,
         partitions=None,
         acquireLock=None,
-        shufflePerIter=None,
         verbose=None,
         partitionShuffles=None,
         port=None,
         useBarrier=None,
         useVectorOut=None,
-        earlyStopPatience=None
+        earlyStopPatience=None,
+        miniBatch=None
     ):
         super().__init__()
         self._setDefault(
@@ -172,13 +172,13 @@ class SparkTorch(
             predictionCol='predicted',
             partitions=-1,
             acquireLock=True,
-            shufflePerIter=True,
             verbose=0,
             partitionShuffles=1,
             port=3000,
             useBarrier=False,
             useVectorOut=False,
-            earlyStopPatience=-1
+            earlyStopPatience=-1,
+            miniBatch=-1
         )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -193,13 +193,13 @@ class SparkTorch(
         predictionCol=None,
         partitions=None,
         acquireLock=None,
-        shufflePerIter=None,
         verbose=None,
         partitionShuffles=None,
         port=None,
         useBarrier=None,
         useVectorOut=None,
-        earlyStopPatience=None
+        earlyStopPatience=None,
+        miniBatch=None
     ):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -222,9 +222,6 @@ class SparkTorch(
     def getAqcuireLock(self):
         return self.getOrDefault(self.acquireLock)
 
-    def getShufflePerIter(self):
-        return self.getOrDefault(self.shufflePerIter)
-
     def getPartitionShuffles(self):
         return self.getOrDefault(self.partitionShuffles)
 
@@ -237,6 +234,9 @@ class SparkTorch(
     def getVectorOut(self):
         return self.getOrDefault(self.useVectorOut)
 
+    def getMiniBatch(self):
+        return self.getOrDefault(self.miniBatch)
+
     def _fit(self, dataset):
         inp_col = self.getInputCol()
         label = self.getLabelCol()
@@ -247,12 +247,12 @@ class SparkTorch(
         partitions = self.getPartitions()
         acquire_lock = self.getAqcuireLock()
         verbose = self.getVerbose()
-        spi = self.getShufflePerIter()
         partition_shuffles = self.getPartitionShuffles()
         port = self.getPort()
         barrier = self.getBarrier()
         use_vector_out = self.getVectorOut()
         early_stop_patience = self.getEarlyStopPatience()
+        mini_batch = self.getMiniBatch()
 
         rdd = dataset.rdd.mapPartitions(handle_data(inp_col, label))
 
@@ -281,7 +281,8 @@ class SparkTorch(
         state_dict = train(
             rdd, torch_obj, server, iters,
             partition_shuffles, verbose=verbose,
-            early_stop_patience=early_stop_patience
+            early_stop_patience=early_stop_patience,
+            mini_batch=mini_batch
         )
 
         loaded = load_torch_model(torch_obj)

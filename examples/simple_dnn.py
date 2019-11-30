@@ -11,11 +11,11 @@ import torch.nn as nn
 if __name__ == '__main__':
     spark = SparkSession.builder \
         .appName("examples") \
-        .master('local[2]').config('spark.driver.memory', '2g') \
+        .master('local[4]').config('spark.driver.memory', '2g') \
         .getOrCreate()
 
     # Read in mnist_train.csv dataset
-    df = spark.read.option("inferSchema", "true").csv('mnist_train.csv').orderBy(rand()).repartition(2)
+    df = spark.read.option("inferSchema", "true").csv('mnist_train.csv').orderBy(rand()).repartition(4)
 
     network = nn.Sequential(
         nn.Linear(784, 256),
@@ -43,16 +43,16 @@ if __name__ == '__main__':
         labelCol='_c0',
         predictionCol='predictions',
         torchObj=torch_obj,
-        iters=100,
-        partitions=2,
+        iters=1500,
+        partitions=4,
         verbose=1,
-        earlyStopPatience=10,
-        useBarrier=True
+        useBarrier=True,
+        miniBatch=128
     )
 
     # Create and save the Pipeline
     p = Pipeline(stages=[vector_assembler, spark_model]).fit(df)
-    p.save('simple_dnn')
+    p.write().overwrite().save('simple_dnn')
 
     # Example of loading the pipeline
     loaded_pipeline = PysparkPipelineWrapper.unwrap(PipelineModel.load('simple_dnn'))
@@ -62,5 +62,5 @@ if __name__ == '__main__':
     evaluator = MulticlassClassificationEvaluator(
         labelCol="_c0", predictionCol="predictions", metricName="accuracy")
     accuracy = evaluator.evaluate(predictions)
-    print("Train Error = %g" % (1.0 - accuracy))
+    print("Train accuracy = %g" % accuracy)
 

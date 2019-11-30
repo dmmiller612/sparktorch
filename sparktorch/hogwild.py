@@ -25,6 +25,7 @@ import dill
 from typing import Dict, List
 from uuid import uuid4
 import torch
+import numpy as np
 
 
 def get_state_dict(master_url: str = 'localhost:3000', retry=True) -> Dict:
@@ -67,7 +68,8 @@ def handle_model(
     master_url: str = 'localhost:3000',
     iters: int = 1000,
     verbose: int = 1,
-    early_stop_patience: int = -1
+    early_stop_patience: int = -1,
+    mini_batch: int = -1
 ):
 
     partition_id = str(uuid4())
@@ -87,6 +89,12 @@ def handle_model(
     criterion = torch_obj.criterion
 
     for i in range(iters):
+
+        if 0 < mini_batch < len(data_obj.x_train):
+            idxs = np.random.choice(len(data_obj.x_train), mini_batch, replace=False).tolist()
+            x_train = data_obj.x_train[idxs]
+            y_train = data_obj.y_train[idxs]
+
         state_dict = get_state_dict(master_url)
         model.load_state_dict(state_dict)
 
@@ -120,12 +128,13 @@ def handle_model(
 
 def train(
     rdd: RDD,
-    torch_obj: TorchObj,
+    torch_obj: str,
     server: Server,
     iters: int = 10,
     partition_shuffles: int = 1,
     verbose: int = 1,
-    early_stop_patience: int = -1
+    early_stop_patience: int = -1,
+    mini_batch: int = -1
 ) -> Dict:
     try:
         master_url = str(server.master_url)
@@ -138,7 +147,8 @@ def train(
                     master_url=master_url,
                     iters=iters,
                     verbose=verbose,
-                    early_stop_patience=early_stop_patience
+                    early_stop_patience=early_stop_patience,
+                    mini_batch=mini_batch
                 )
             ).foreach(lambda x: x)
 

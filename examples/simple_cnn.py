@@ -11,16 +11,14 @@ from examples.cnn_network import Net
 
 
 if __name__ == '__main__':
-
     spark = SparkSession.builder \
         .appName("examples") \
-        .master('local[4]').config('spark.driver.memory', '2g') \
+        .master('local[2]').config('spark.driver.memory', '2g') \
         .getOrCreate()
 
     # Read in mnist_train.csv dataset
-    df = spark.read.option("inferSchema", "true").csv('mnist_train.csv').orderBy(rand()).coalesce(4)
+    df = spark.read.option("inferSchema", "true").csv('mnist_train.csv').orderBy(rand()).repartition(2)
 
-    # Load network. NOTE: Due to pytorch pickling issues, this needs to be in a separate file
     network = Net()
 
     # Build the pytorch object
@@ -28,7 +26,7 @@ if __name__ == '__main__':
         model=network,
         criterion=nn.CrossEntropyLoss(),
         optimizer=torch.optim.Adam,
-        lr=0.00005
+        lr=0.00001
     )
 
     # Setup features
@@ -41,22 +39,24 @@ if __name__ == '__main__':
         labelCol='_c0',
         predictionCol='predictions',
         torchObj=torch_obj,
-        iters=50,
-        partitions=4,
+        iters=1000,
+        partitions=2,
         verbose=1,
-        useBarrier=True
+        useBarrier=True,
+        miniBatch=128
     )
 
     # Create and save the Pipeline
     p = Pipeline(stages=[vector_assembler, spark_model]).fit(df)
-    p.save('simple_cnn')
+    p.write().overwrite().save('simple_cnn')
 
     # Example of loading the pipeline
     loaded_pipeline = PysparkPipelineWrapper.unwrap(PipelineModel.load('simple_cnn'))
 
     # Run predictions and evaluation
-    predictions = loaded_pipeline.transform(df)
+    predictions = loaded_pipeline.transform(df).persist()
     evaluator = MulticlassClassificationEvaluator(
         labelCol="_c0", predictionCol="predictions", metricName="accuracy")
     accuracy = evaluator.evaluate(predictions)
-    print("Test Error = %g" % (1.0 - accuracy))
+    print("Train accuracy = %g" % accuracy)
+
