@@ -8,23 +8,21 @@ from sparktorch import PysparkPipelineWrapper
 import torch
 import torch.nn as nn
 
-
 if __name__ == '__main__':
     spark = SparkSession.builder \
         .appName("examples") \
-        .master('local[4]').config('spark.driver.memory', '2g') \
+        .master('local[2]').config('spark.driver.memory', '2g') \
         .getOrCreate()
 
     # Read in mnist_train.csv dataset
-    df = spark.read.option("inferSchema", "true").csv('mnist_train.csv').orderBy(rand()).coalesce(4)
+    df = spark.read.option("inferSchema", "true").csv('mnist_train.csv').orderBy(rand()).repartition(2)
 
     network = nn.Sequential(
         nn.Linear(784, 256),
         nn.Softplus(),
         nn.Linear(256, 256),
         nn.Softplus(),
-        nn.Linear(256, 10),
-        nn.Softmax(dim=1)
+        nn.Linear(256, 10)
     )
 
     # Build the pytorch object
@@ -45,22 +43,34 @@ if __name__ == '__main__':
         labelCol='_c0',
         predictionCol='predictions',
         torchObj=torch_obj,
-        iters=50,
-        partitions=4,
+        iters=10,
+        partitions=2,
         verbose=1,
-        useBarrier=True
+        useBarrier=True,
+        acquireLock=True
     )
 
     # Create and save the Pipeline
     p = Pipeline(stages=[vector_assembler, spark_model]).fit(df)
     p.save('simple_dnn')
 
+    import time
+
+    start = time.time()
     # Example of loading the pipeline
     loaded_pipeline = PysparkPipelineWrapper.unwrap(PipelineModel.load('simple_dnn'))
+    end = time.time()
+    print(f'it took {end-start} time to load model')
 
+    start = time.time()
     # Run predictions and evaluation
-    predictions = loaded_pipeline.transform(df)
+    predictions = loaded_pipeline.transform(df).collect()
+    end = time.time()
+    print(f'it took {end-start} time to run evaluation')
+    #print("Test Error = %g" % (1.0 - accuracy))
+    """
     evaluator = MulticlassClassificationEvaluator(
         labelCol="_c0", predictionCol="predictions", metricName="accuracy")
     accuracy = evaluator.evaluate(predictions)
-    print("Test Error = %g" % (1.0 - accuracy))
+
+    """

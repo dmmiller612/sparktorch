@@ -60,17 +60,24 @@ def handle_model(
     iters: int = 1000,
     verbose: int = 1
 ):
+    import time
 
     partition_id = str(uuid4())
     if data is None:
         return
 
+    start = time.time()
     data_obj = handle_features(data)
+    end = time.time()
+    print(f'loading data costs: {end-start}')
 
     x_train = data_obj.x_train
     y_train = data_obj.y_train if data_obj.y_train is not None else x_train
 
+    start = time.time()
     torch_obj = load_torch_model(torch_obj)
+    end = time.time()
+    print(f'loading model costs: {end-start}')
 
     model = torch_obj.model
     model.train()

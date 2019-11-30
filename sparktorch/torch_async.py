@@ -36,18 +36,21 @@ from pyspark.ml.linalg import Vectors, VectorUDT
 from pyspark.sql.types import DoubleType
 from pyspark.sql import functions as F
 import dill
+import pandas as pd
+from pyspark.sql.types import StructField, DoubleType, StructType
+from pyspark.ml.linalg import VectorUDT, Vectors
+
 
 from pyspark import SparkContext
 
 
-def handle_data(data, inp_col, label_col):
-    y_train = data[label_col] if label_col else None
-    return DataObj(
-        np.asarray(data[inp_col]),
-        y_train,
-        None,
-        None
-    )
+def handle_data(input_col, label_col):
+    def inner(dataset):
+        res = [DataObj(x_train=np.asarray(data[input_col].toArray()), y_train=data[label_col] if label_col else None, x_val=None, y_val=None) for data in dataset]
+        return res
+
+    return inner
+
 
 
 class SparkTorchModel(Model, HasInputCol, HasPredictionCol, PysparkReaderWriter, MLReadable, MLWritable, Identifiable):
@@ -85,37 +88,57 @@ class SparkTorchModel(Model, HasInputCol, HasPredictionCol, PysparkReaderWriter,
         return self._set(**kwargs)
 
     def _transform(self, dataset):
-        inp = self.getOrDefault(self.inputCol)
+        input_column = self.getOrDefault(self.inputCol)
         out = self.getOrDefault(self.predictionCol)
         mod_str = self.getOrDefault(self.modStr)
         use_vector_out = self.getOrDefault(self.useVectorOut)
 
         model = dill.loads(codecs.decode(mod_str.encode(), "base64"))
         model_broadcast = dataset._sc.broadcast(model)
+        columns = dataset.columns
 
         def predict_vec(data):
-            features = np.asarray(data).reshape((1, len(data)))
+            print("IN VEC")
+            data = pd.DataFrame(list(data), columns=columns)
+            tmp_feats = [d.toArray() for d in data[input_column].values]
+            features = np.asarray(tmp_feats)
             x_data = torch.from_numpy(features).float()
             model = model_broadcast.value
             model.eval()
-            return Vectors.dense(model(x_data).detach().numpy().flatten())
+            predictions = model(x_data).detach().numpy().tolist()
+            data[out] = [Vectors.dense(p) for p in predictions]
+            return [r.tolist() for r in data.to_records(index=False)]
 
         def predict_float(data):
-            features = np.asarray(data).reshape((1, len(data)))
+            print("IN FLOAT")
+            data = pd.DataFrame(list(data), columns=columns)
+            tmp_feats = [d.toArray() for d in data[input_column].values]
+            features = np.asarray(tmp_feats)
             x_data = torch.from_numpy(features).float()
             model = model_broadcast.value
             model.eval()
-            raw_prediction = model(x_data).detach().numpy().flatten()
-            if len(raw_prediction) > 1:
-                return float(np.argmax(raw_prediction))
-            return float(raw_prediction[0])
 
-        if use_vector_out:
-            udfGenerateCode = F.udf(predict_vec, VectorUDT())
-        else:
-            udfGenerateCode = F.udf(predict_float, DoubleType())
+            to_ret = []
+            raw_predictions = model(x_data).detach().numpy().tolist()
+            for raw_prediction in raw_predictions:
+                if len(raw_prediction) > 1:
+                    to_ret.append(float(np.argmax(raw_prediction)))
+                else:
+                    to_ret.append(float(raw_prediction[0]))
 
-        return dataset.withColumn(out, udfGenerateCode(inp))
+            data[out] = to_ret
+            return [r.tolist() for r in data.to_records(index=False)]
+
+        to_prepend = ([StructField(out, VectorUDT(), True)]
+                      if use_vector_out
+                      else [StructField(out, DoubleType(), True)])
+        schema = StructType(dataset.schema.fields + to_prepend)
+
+        func = predict_vec if use_vector_out else predict_float
+
+        return dataset.sql_ctx.sparkSession.createDataFrame(
+            dataset.rdd.mapPartitions(func), schema=schema
+        )
 
 
 class SparkTorch(
@@ -242,7 +265,7 @@ class SparkTorch(
         barrier = self.getBarrier()
         use_vector_out = self.getVectorOut()
 
-        rdd = dataset.rdd.map(lambda x: handle_data(x, inp_col, label))
+        rdd = dataset.rdd.mapPartitions(handle_data(inp_col, label))
 
         if partitions > 0:
             rdd = rdd.repartition(partitions)
