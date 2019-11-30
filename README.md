@@ -1,7 +1,7 @@
 # SparkTorch
 
 This is an implementation of Pytorch on Spark. The goal of this library is to provide a simple, understandable interface 
-in using Torch on Spark. With SparkFlow, you can easily integrate your deep learning model with a ML Spark Pipeline.
+in using Torch on Spark. With SparkTorch, you can easily integrate your deep learning model with a ML Spark Pipeline.
 Underneath, SparkTorch uses a parameter server to train the Pytorch network in a distributed manner. Through the api,
 the user can specify the style of training, whether that is Hogwild or async with locking.
 

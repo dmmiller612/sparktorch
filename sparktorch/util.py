@@ -16,6 +16,7 @@ THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRI
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -41,7 +42,12 @@ def torch_encoder(obj):
     ).decode()
 
 
-def torch_decoder(model_ser):
+def torch_decoder(model_ser: str):
+    """
+    Decodes the torch object or model
+    :param model_ser: Serialized object
+    :return: the object
+    """
     return dill.loads(codecs.decode(model_ser.encode(), "base64"))
 
 
