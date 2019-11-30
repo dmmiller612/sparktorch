@@ -204,5 +204,28 @@ class SparkTorchTests(PysparkTest):
         self.assertTrue(type(res[0]['predictions']) is float)
 
 
+    def test_validation_pct(self):
+        model = serialize_torch_obj(
+            ClassificationNet(), nn.CrossEntropyLoss(), torch.optim.Adam, lr=0.1
+        )
+        data = self.generate_random_data().repartition(2)
+
+        stm = SparkTorch(
+            inputCol='features',
+            labelCol='label',
+            predictionCol='predictions',
+            torchObj=model,
+            iters=25,
+            verbose=1,
+            partitions=2,
+            useBarrier=True,
+            validationPct=0.25
+        ).fit(data)
+
+        res = stm.transform(data).take(1)
+
+        self.assertTrue('predictions' in res[0])
+        self.assertTrue(type(res[0]['predictions']) is float)
+
 if __name__ == '__main__':
     unittest.main()

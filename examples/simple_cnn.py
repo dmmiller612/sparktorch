@@ -55,8 +55,10 @@ if __name__ == '__main__':
 
     # Run predictions and evaluation
     predictions = loaded_pipeline.transform(df).persist()
+
     evaluator = MulticlassClassificationEvaluator(
         labelCol="_c0", predictionCol="predictions", metricName="accuracy")
+
     accuracy = evaluator.evaluate(predictions)
     print("Train accuracy = %g" % accuracy)
 

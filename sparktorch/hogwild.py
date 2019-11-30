@@ -69,17 +69,22 @@ def handle_model(
     iters: int = 1000,
     verbose: int = 1,
     early_stop_patience: int = -1,
-    mini_batch: int = -1
+    mini_batch: int = -1,
+    validation_pct: float = 0
 ):
 
     partition_id = str(uuid4())
     if data is None:
-        return
+        return 'finished'
 
-    data_obj = handle_features(data)
+    data_obj = handle_features(data, validation_pct)
+    if data_obj.x_train is None:
+        return 'finished'
 
     x_train = data_obj.x_train
     y_train = data_obj.y_train if data_obj.y_train is not None else x_train
+    x_val = data_obj.x_val
+    y_val = data_obj.y_val if data_obj.y_val is not None else x_val
 
     torch_obj = load_torch_model(torch_obj)
 
@@ -108,6 +113,16 @@ def handle_model(
 
         loss.backward()
 
+        val_loss = None
+        if x_val is not None:
+            pred_val = model(x_val)
+            try:
+                val_loss = criterion(pred_val, y_val)
+            except RuntimeError as e:
+                y_val = torch.flatten(y_val.long())
+                val_loss = criterion(pred_val, y_val)
+            val_loss = val_loss.item()
+
         gradients = []
         for param in model.parameters():
             gradients.append(param.grad)
@@ -116,10 +131,11 @@ def handle_model(
 
         loss_v = loss.item()
         if verbose:
-            print(f"Partition: {partition_id}. Iteration: {i}. Loss: {loss_v}")
+            print(f"Partition: {partition_id}. Iteration: {i}. Loss: {loss_v}, Val Loss: {val_loss}")
 
         if early_stop_patience > 0:
-            should_stop = put_early_stop(loss_v, master_url)
+            loss_to_use = val_loss if val_loss is not None else loss_v
+            should_stop = put_early_stop(loss_to_use, master_url)
             if should_stop['stop']:
                 break
 
@@ -134,7 +150,8 @@ def train(
     partition_shuffles: int = 1,
     verbose: int = 1,
     early_stop_patience: int = -1,
-    mini_batch: int = -1
+    mini_batch: int = -1,
+    validation_pct: float = 0.0
 ) -> Dict:
     try:
         master_url = str(server.master_url)
@@ -148,7 +165,8 @@ def train(
                     iters=iters,
                     verbose=verbose,
                     early_stop_patience=early_stop_patience,
-                    mini_batch=mini_batch
+                    mini_batch=mini_batch,
+                    validation_pct=validation_pct
                 )
             ).foreach(lambda x: x)
 

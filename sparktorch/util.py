@@ -51,7 +51,7 @@ def torch_decoder(model_ser: str):
     return dill.loads(codecs.decode(model_ser.encode(), "base64"))
 
 
-def handle_features(data: List[DataObj]) -> DataObj:
+def handle_features(data: List[DataObj], validation_pct: float=0.0) -> DataObj:
     x_train = []
     y_train = []
 
@@ -63,6 +63,25 @@ def handle_features(data: List[DataObj]) -> DataObj:
                 y_train.append(feature.y_train)
 
         x_train.append(feature.x_train)
+
+    if len(x_train) == 0:
+        return DataObj(x_train=None, y_train=None, x_val=None, y_val=None)
+
+    if validation_pct > 0:
+        val_amt = int(len(x_train) * validation_pct)
+        val_idxs = np.random.choice(len(x_train), val_amt, replace=False).tolist()
+        train_idxs = list(set(val_idxs).symmetric_difference(set([i for i in range(len(x_train))])))
+
+        full_x = torch.from_numpy(np.stack(x_train)).float()
+        full_y = torch.from_numpy(np.asarray(y_train)).float() if y_train else None
+
+        x_val = full_x[val_idxs]
+        y_val = full_y[val_idxs] if full_y is not None else None
+
+        x_train = full_x[train_idxs]
+        y_train = full_y[train_idxs] if full_y is not None else None
+
+        return DataObj(x_train=x_train, y_train=y_train, x_val=x_val, y_val=y_val)
 
     x_train = torch.from_numpy(np.stack(x_train)).float()
     y_train = torch.from_numpy(np.asarray(y_train)).float() if y_train else None

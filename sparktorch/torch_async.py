@@ -144,6 +144,7 @@ class SparkTorch(
     useVectorOut = Param(Params._dummy(), "useVectorOut", "", typeConverter=TypeConverters.toBoolean)
     earlyStopPatience = Param(Params._dummy(), "earlyStopPatience", "", typeConverter=TypeConverters.toInt)
     miniBatch = Param(Params._dummy(), "miniBatch", "", typeConverter=TypeConverters.toInt)
+    validationPct = Param(Params._dummy(), "validationPct", "", typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(
@@ -161,7 +162,8 @@ class SparkTorch(
         useBarrier=None,
         useVectorOut=None,
         earlyStopPatience=None,
-        miniBatch=None
+        miniBatch=None,
+        validationPct=None
     ):
         super().__init__()
         self._setDefault(
@@ -178,7 +180,8 @@ class SparkTorch(
             useBarrier=False,
             useVectorOut=False,
             earlyStopPatience=-1,
-            miniBatch=-1
+            miniBatch=-1,
+            validationPct=0.0
         )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -199,7 +202,8 @@ class SparkTorch(
         useBarrier=None,
         useVectorOut=None,
         earlyStopPatience=None,
-        miniBatch=None
+        miniBatch=None,
+        validationPct=None
     ):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -237,6 +241,9 @@ class SparkTorch(
     def getMiniBatch(self):
         return self.getOrDefault(self.miniBatch)
 
+    def getValidationPct(self):
+        return self.getOrDefault(self.validationPct)
+
     def _fit(self, dataset):
         inp_col = self.getInputCol()
         label = self.getLabelCol()
@@ -253,6 +260,7 @@ class SparkTorch(
         use_vector_out = self.getVectorOut()
         early_stop_patience = self.getEarlyStopPatience()
         mini_batch = self.getMiniBatch()
+        validation_pct = self.getValidationPct()
 
         rdd = dataset.rdd.mapPartitions(handle_data(inp_col, label))
 
@@ -282,7 +290,8 @@ class SparkTorch(
             rdd, torch_obj, server, iters,
             partition_shuffles, verbose=verbose,
             early_stop_patience=early_stop_patience,
-            mini_batch=mini_batch
+            mini_batch=mini_batch,
+            validation_pct=validation_pct
         )
 
         loaded = load_torch_model(torch_obj)
