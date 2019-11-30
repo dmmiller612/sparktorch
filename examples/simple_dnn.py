@@ -47,7 +47,8 @@ if __name__ == '__main__':
         partitions=4,
         verbose=1,
         useBarrier=True,
-        miniBatch=128
+        miniBatch=128,
+        validationPct=0.2
     )
 
     # Create and save the Pipeline
