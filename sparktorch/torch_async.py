@@ -21,9 +21,11 @@ from sparktorch.pipeline_util import PysparkReaderWriter
 from sparktorch.util import DataObj, load_torch_model
 from sparktorch.server import Server
 from sparktorch.hogwild import train, get_main
+from sparktorch.async_server import train_async
 import numpy as np
 import torch
 import codecs
+import socket
 
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasPredictionCol, HasLabelCol
@@ -134,6 +136,7 @@ class SparkTorch(
 ):
 
     torchObj = Param(Params._dummy(), "torchObj", "", typeConverter=TypeConverters.toString)
+    mode = Param(Params._dummy(), "mode", "", typeConverter=TypeConverters.toString)
     iters = Param(Params._dummy(), "iters", "", typeConverter=TypeConverters.toInt)
     partitions = Param(Params._dummy(), "partitions", "", typeConverter=TypeConverters.toInt)
     verbose = Param(Params._dummy(), "verbose", "", typeConverter=TypeConverters.toInt)
@@ -163,7 +166,8 @@ class SparkTorch(
         useVectorOut=None,
         earlyStopPatience=None,
         miniBatch=None,
-        validationPct=None
+        validationPct=None,
+        mode=None
     ):
         super().__init__()
         self._setDefault(
@@ -181,7 +185,8 @@ class SparkTorch(
             useVectorOut=False,
             earlyStopPatience=-1,
             miniBatch=-1,
-            validationPct=0.0
+            validationPct=0.0,
+            mode='async'
         )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -203,7 +208,8 @@ class SparkTorch(
         useVectorOut=None,
         earlyStopPatience=None,
         miniBatch=None,
-        validationPct=None
+        validationPct=None,
+        mode=None
     ):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -244,6 +250,9 @@ class SparkTorch(
     def getValidationPct(self):
         return self.getOrDefault(self.validationPct)
 
+    def getMode(self):
+        return self.getOrDefault(self.mode)
+
     def _fit(self, dataset):
         inp_col = self.getInputCol()
         label = self.getLabelCol()
@@ -261,38 +270,53 @@ class SparkTorch(
         early_stop_patience = self.getEarlyStopPatience()
         mini_batch = self.getMiniBatch()
         validation_pct = self.getValidationPct()
+        mode = self.getMode()
 
         rdd = dataset.rdd.mapPartitions(handle_data(inp_col, label))
 
         if partitions > 0:
             rdd = rdd.repartition(partitions)
 
-        partitions = partitions if partitions else rdd.getNumPartitions()
+        partitions = partitions if partitions > 0 else rdd.getNumPartitions()
 
-        if barrier:
-            rdd = rdd.barrier()
+        master_url = SparkContext._active_spark_context.getConf().get("spark.driver.host").__str__()
+        if mode == 'async':
+            state_dict = train_async(
+                rdd=rdd,
+                torch_obj=torch_obj,
+                master_url=master_url,
+                iters=iters,
+                partition_shuffles=1,
+                verbose=verbose,
+                mini_batch=mini_batch,
+                validation_pct=validation_pct,
+                world_size=partitions+1
+            )
+        elif mode == 'hogwild':
+            if barrier:
+                rdd = rdd.barrier()
+            server = Server(
+                torch_obj=torch_obj,
+                master_url=master_url + ":" + str(port),
+                port=port,
+                acquire_lock=acquire_lock,
+                early_stop_patience=early_stop_patience,
+                window_len=partitions
+            )
 
-        master_url = SparkContext._active_spark_context.getConf().get("spark.driver.host").__str__() + ":" + str(port)
-        server = Server(
-            torch_obj=torch_obj,
-            master_url=master_url,
-            port=port,
-            acquire_lock=acquire_lock,
-            early_stop_patience=early_stop_patience,
-            window_len=partitions
-        )
+            server.start_server()
+            time.sleep(5)
+            print(f'Server is running {get_main(master_url + ":" + str(port))}')
 
-        server.start_server()
-        time.sleep(5)
-        print(f'Server is running {get_main(master_url)}')
-
-        state_dict = train(
-            rdd, torch_obj, server, iters,
-            partition_shuffles, verbose=verbose,
-            early_stop_patience=early_stop_patience,
-            mini_batch=mini_batch,
-            validation_pct=validation_pct
-        )
+            state_dict = train(
+                rdd, torch_obj, server, iters,
+                partition_shuffles, verbose=verbose,
+                early_stop_patience=early_stop_patience,
+                mini_batch=mini_batch,
+                validation_pct=validation_pct
+            )
+        else:
+            raise RuntimeError(f"mode: {mode} not recognized.")
 
         loaded = load_torch_model(torch_obj)
         model = loaded.model

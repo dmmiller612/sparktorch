@@ -20,7 +20,7 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.5.11-Linux-x86
 
 ENV PYTHON_VERSION $PYTHON_VERSION
 COPY ./environment.yml /tmp/environment.yml
-RUN /opt/conda/bin/conda create -n sparktorch python=$PYTHON_VERSION && \
+RUN /opt/conda/bin/conda create -n sparktorch python=3.6 && \
     /opt/conda/bin/conda env update -n sparktorch -f /tmp/environment.yml && \
     echo "conda activate sparktorch" >> ~/.bashrc
 
@@ -28,7 +28,7 @@ RUN /opt/conda/bin/conda create -n sparktorch python=$PYTHON_VERSION && \
 ENV SCALA_VERSION 2.11.8
 ENV SPARK_VERSION 2.4.4
 ENV SPARK_BUILD "spark-${SPARK_VERSION}-bin-hadoop2.7"
-ENV SPARK_BUILD_URL "https://dist.apache.org/repos/dist/release/spark/spark-2.4.4/spark-2.4.4.tgz"
+ENV SPARK_BUILD_URL "https://dist.apache.org/repos/dist/release/spark/spark-2.4.4/spark-2.4.4-bin-hadoop2.7.tgz"
 
 RUN wget --quiet $SPARK_BUILD_URL -O /tmp/spark.tgz && \
     tar -C /opt -xf /tmp/spark.tgz && \

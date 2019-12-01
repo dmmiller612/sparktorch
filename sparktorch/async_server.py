@@ -18,90 +18,81 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR TH
 """
 
 from sparktorch.util import handle_features, load_torch_model, DataObj
-from sparktorch.server import Server
 from pyspark.rdd import RDD
-import requests
-import dill
 from typing import Dict, List
 from uuid import uuid4
-import torch
 import numpy as np
+from pyspark.rdd import PipelinedRDD
+import torch
+import torch.distributed as dist
+from torch.multiprocessing import Process
+import os
+from datetime import timedelta
 
 
-def get_state_dict(master_url: str = 'localhost:3000', retry=True) -> Dict:
-    try:
-        r = requests.get('http://{0}/parameters'.format(master_url), timeout=10)
-    except Exception as e:
-        if retry:
-            r = requests.get('http://{0}/parameters'.format(master_url), timeout=10)
-        else:
-            raise e
-
-    state_dict = dill.loads(r.content)
-    return state_dict
+def mapPartitionsWithIndex(rdd, f, preservesPartitioning=False):
+    return PipelinedRDD(rdd, f, preservesPartitioning, isFromBarrier=True)
 
 
-def put_deltas_to_server(delta: List, master_url: str = 'localhost:3000', retry=True):
-    try:
-        requests.post('http://{0}/update'.format(master_url), data=dill.dumps(delta), timeout=10)
-    except Exception as e:
-        if retry:
-            requests.post('http://{0}/update'.format(master_url), data=dill.dumps(delta), timeout=10)
-
-
-def put_early_stop(loss, master_url: str = 'localhost:3000', retry=True):
-    try:
-        return requests.post('http://{0}/losses'.format(master_url), json={'loss': loss}, timeout=10).json()
-    except Exception as e:
-        if retry:
-            return requests.post('http://{0}/losses'.format(master_url), json={'loss': loss}, timeout=10).json()
-
-
-def get_main(master_url: str = 'localhost:3000') -> str:
-    r = requests.get('http://{0}/'.format(master_url), timeout=3)
-    return r.text
+def process_generic_model(params, iters):
+    for i in range(iters):
+        for p in params:
+            z = torch.zeros_like(p)
+            dist.all_reduce(z, op=torch.distributed.ReduceOp.SUM)
 
 
 def handle_model(
+    index: int,
     data: List[DataObj],
     torch_obj: str,
-    master_url: str = 'localhost:3000',
+    master_url: str = '127.0.0.1',
     iters: int = 1000,
+    world_size: int = 2,
     verbose: int = 1,
-    early_stop_patience: int = -1,
     mini_batch: int = -1,
     validation_pct: float = 0
 ):
 
+    # Def Load model
+    torch_obj = load_torch_model(torch_obj)
+    model = torch_obj.model
+    model.train()
+
+    criterion = torch_obj.criterion
+    optimizer = torch_obj.optimizer
+
+    # Initialize zero params for -1 index
+    params = [torch.zeros_like(p) for p in model.parameters()]
+
+    if dist.is_initialized():
+        dist.destroy_process_group()
+
+    os.environ['MASTER_ADDR'] = master_url
+    os.environ['MASTER_PORT'] = '5000'
+    dist.init_process_group('gloo', rank=index + 1, world_size=world_size, timeout=timedelta(seconds=60))
     partition_id = str(uuid4())
+
     if data is None:
-        return 'finished'
+        process_generic_model(params, iters)
+        return []
 
     data_obj = handle_features(data, validation_pct)
     if data_obj.x_train is None:
-        return 'finished'
+        process_generic_model(params, iters)
+        return []
 
     x_train = data_obj.x_train
     y_train = data_obj.y_train if data_obj.y_train is not None else x_train
     x_val = data_obj.x_val
     y_val = data_obj.y_val if data_obj.y_val is not None else x_val
 
-    torch_obj = load_torch_model(torch_obj)
-
-    model = torch_obj.model
-    model.train()
-
-    criterion = torch_obj.criterion
-
     for i in range(iters):
+        optimizer.zero_grad()
 
         if 0 < mini_batch < len(data_obj.x_train):
             idxs = np.random.choice(len(data_obj.x_train), mini_batch, replace=False).tolist()
             x_train = data_obj.x_train[idxs]
             y_train = data_obj.y_train[idxs]
-
-        state_dict = get_state_dict(master_url)
-        model.load_state_dict(state_dict)
 
         y_pred = model(x_train)
 
@@ -113,6 +104,12 @@ def handle_model(
 
         loss.backward()
 
+        for param in model.parameters():
+            dist.all_reduce(param.grad.data, op=torch.distributed.ReduceOp.SUM)
+            param.grad.data /= (world_size-1)
+
+        optimizer.step()
+
         val_loss = None
         if x_val is not None:
             pred_val = model(x_val)
@@ -123,63 +120,52 @@ def handle_model(
                 val_loss = criterion(pred_val, y_val)
             val_loss = val_loss.item()
 
-        gradients = []
-        for param in model.parameters():
-            gradients.append(param.grad)
-
-        put_deltas_to_server(gradients, master_url)
-
         loss_v = loss.item()
         if verbose:
             print(f"Partition: {partition_id}. Iteration: {i}. Loss: {loss_v}, Val Loss: {val_loss}")
 
-        if early_stop_patience > 0:
-            loss_to_use = val_loss if val_loss is not None else loss_v
-            should_stop = put_early_stop(loss_to_use, master_url)
-            if should_stop['stop']:
-                break
-
-    return "finished"
+    return [model.state_dict()]
 
 
-def train(
+def train_async(
     rdd: RDD,
     torch_obj: str,
-    server: Server,
+    master_url: str,
     iters: int = 10,
     partition_shuffles: int = 1,
     verbose: int = 1,
-    early_stop_patience: int = -1,
     mini_batch: int = -1,
-    validation_pct: float = 0.0
+    validation_pct: float = 0.0,
+    world_size: int = 2
 ) -> Dict:
-    try:
-        master_url = str(server.master_url)
 
+    p = Process(target=handle_model,
+                args=(-1, None, torch_obj, master_url, iters, world_size))
+    p.start()
+
+    try:
+        state_dict = None
         for i in range(partition_shuffles):
-            rdd.mapPartitions(
-                lambda x: handle_model(
+            state_dict = mapPartitionsWithIndex(
+                rdd, lambda i, x: handle_model(
+                    i,
                     x,
                     torch_obj=torch_obj,
                     master_url=master_url,
                     iters=iters,
                     verbose=verbose,
-                    early_stop_patience=early_stop_patience,
                     mini_batch=mini_batch,
-                    validation_pct=validation_pct
+                    validation_pct=validation_pct,
+                    world_size=world_size
                 )
-            ).foreach(lambda x: x)
+            ).collect()
 
             if partition_shuffles - i > 1:
                 num_partitions = rdd.getNumPartitions()
                 rdd = rdd.repartition(num_partitions)
 
-        state_dict = get_state_dict(master_url)
-        server.stop_server()
+        return state_dict[0]
 
-        return state_dict
-
-    except Exception as e:
-        server.stop_server()
-        raise e
-
+    finally:
+        p.terminate()
+        p.join()

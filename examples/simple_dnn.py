@@ -44,7 +44,6 @@ if __name__ == '__main__':
         predictionCol='predictions',
         torchObj=torch_obj,
         iters=1500,
-        partitions=4,
         verbose=1,
         useBarrier=True,
         miniBatch=128,
