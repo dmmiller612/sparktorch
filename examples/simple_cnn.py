@@ -26,7 +26,7 @@ if __name__ == '__main__':
         model=network,
         criterion=nn.CrossEntropyLoss(),
         optimizer=torch.optim.Adam,
-        lr=0.00001
+        lr=0.001
     )
 
     # Setup features
@@ -40,10 +40,10 @@ if __name__ == '__main__':
         predictionCol='predictions',
         torchObj=torch_obj,
         iters=1000,
-        partitions=2,
         verbose=1,
         useBarrier=True,
-        miniBatch=128
+        validationPct=0.2,
+        miniBatch=64
     )
 
     # Create and save the Pipeline

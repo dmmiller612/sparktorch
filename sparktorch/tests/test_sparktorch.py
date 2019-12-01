@@ -9,7 +9,7 @@ from sparktorch.torch_async import SparkTorch
 from sparktorch.tests.simple_net import Net, AutoEncoder, ClassificationNet
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def spark():
     return (SparkSession.builder
             .master('local[2]')
@@ -17,7 +17,7 @@ def spark():
             .getOrCreate())
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def data(spark):
     dat = [(1.0, Vectors.dense(np.random.normal(0,1,10))) for _ in range(0, 200)]
     dat2 = [(0.0, Vectors.dense(np.random.normal(2,1,10))) for _ in range(0, 200)]
@@ -25,7 +25,7 @@ def data(spark):
     return spark.createDataFrame(dat, ["label", "features"]).repartition(2)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def sequential_model():
     model = torch.nn.Sequential(
         nn.Linear(10, 20),
@@ -37,7 +37,7 @@ def sequential_model():
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def general_model():
     model = serialize_torch_obj(
         Net(), nn.MSELoss(), torch.optim.Adam, lr=0.001
@@ -51,8 +51,8 @@ def test_simple_sequential(data, sequential_model):
         labelCol='label',
         predictionCol='predictions',
         torchObj=sequential_model,
-        iters=5,
-        acquireLock=True
+        verbose=1,
+        iters=5
     ).fit(data)
 
     res = stm.transform(data).take(1)
@@ -61,14 +61,14 @@ def test_simple_sequential(data, sequential_model):
 
 
 def test_simple_torch_module(data, general_model):
+    print("IN HERE")
     stm = SparkTorch(
         inputCol='features',
         labelCol='label',
         predictionCol='predictions',
         torchObj=general_model,
         iters=5,
-        verbose=1,
-        acquireLock=False
+        verbose=1
     ).fit(data)
 
     res = stm.transform(data).take(1)
@@ -141,6 +141,7 @@ def test_early_stopping(data, general_model):
         iters=25,
         verbose=1,
         partitions=2,
+        mode='hogwild',
         earlyStopPatience=1,
         acquireLock=True
     ).fit(data)
