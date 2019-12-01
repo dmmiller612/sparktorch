@@ -14,12 +14,13 @@ Like SparkFlow, SparkTorch's main objective is to seamlessly work with Spark's M
 core components:
 
 * Distributed training for large datasets. Multiple Pytorch models are ran in parallel with one central network that 
-manages weights. This is useful for training very large datasets that do not fit into a single machine.
+manages gradients. This is useful for training very large datasets that do not fit into a single machine. 
+Barrier execution is also available.
 * Full integration with Spark's ML library. This ensures that you can save and load pipelines with your trained model.
 * Inference. With SparkTorch, you can load your existing trained model and run inference on billions of records 
 in parallel. 
 
-On top of these features, SparkTorch can utilize barrier execution, ensuring that all executors run currently during 
+On top of these features, SparkTorch can utilize barrier execution, ensuring that all executors run concurrently during 
 training. 
 
 ## Install
@@ -61,8 +62,7 @@ torch_obj = serialize_torch_obj(
 # Setup features
 vector_assembler = VectorAssembler(inputCols=df.columns[1:785], outputCol='features')
 
-# Create a SparkTorch Model with barrier execution and torch server.
-# Mode is set to async
+# Create a SparkTorch Model with torch distributed. Barrier execution is on by default for this mode.
 spark_model = SparkTorch(
     inputCol='features',
     labelCol='_c0',
@@ -77,8 +77,100 @@ p = Pipeline(stages=[vector_assembler, spark_model]).fit(df)
 p.save('simple_dnn')
 ```
 
-### Options Overview
+## Documentation
 
+This is a small documentation section on how to SparkTorch. Please look at the examples library for more details.
+
+#### Creating a Torch Object
+
+To create a Torch object for training, you will need to utilize the `serialize_torch_obj` from SparkTorch. To do so, 
+simply add your network, loss criterion, the optimizer class, and any options as a dictionary to supply to the optimizer 
+(such as learning rate). A simple example of this is:
+
+```python
+from sparktorch import serialize_torch_obj
+
+torch_obj = serialize_torch_obj(
+    model=network,
+    criterion=nn.CrossEntropyLoss(),
+    optimizer=torch.optim.Adam,
+    lr=0.0001
+)
+```
+
+NOTE: One thing to remember is that if your network is not a sequential, it will need to be saved in a separate file and
+available in the python path. An example of this can be found in `simple_cnn.py`.
+
+#### Training Options
+
+There are two main training options with SparkTorch: `async` and `hogwild`. The async mode utilizes the torch distributed 
+package, ensuring that the networks are in sync through each iteration. This is the most supported version. When using 
+this option, you will need to be aware that barrier execution is enforced, meaning that the parallelism will need to match 
+the partitions. 
+
+The Hogwild approach utilizes a Flask Service underneath the hood. When using Hogwild, it is strongly recommended that you use the 
+`useBarrier` option to force barrier execution. Below are a list of parameters to SparkTorch and their meaning.
+
+```
+inputCol: Standard Spark InputCol that must be a Vector.
+labelCol: Standard Spark Label column. Can be null.
+torchObj: The TorchObj which is described in the `Creating a Torch Object` section.
+iters: Number of iterations to run per partition.
+predictionCol: The standard spark prediction column for the dataframe.
+partitions: Ability to repartition during training.
+acquireLock: Used in Hogwild only. Forces locking on the server.
+verbose: Describes whether you want real time logging
+partitionShuffles: Only used in Hogwild. Will reshuffle data after completing training.
+port: Only used in hogwild. Server port.
+useBarrier: Only used in hogwild. Describes whether you want barrier execution. (Async mode uses barrier by default)
+useVectorOut: Boolean to describe if you want the model output to be a vector (Defaults to float).
+earlyStopPatience: If greater than 0, it will enforce early stopping based on validation.
+miniBatch: Minibatch size for training per iteration. (Randomly shuffled)
+validationPct: Percentage to use for validation.
+mode: which training mode to use. `async` uses pytorch server. `hogwild` uses the flask service.
+```
+
+#### Saving and Loading Pipelines
+
+Since saving and loading custom ML Transformers in pure python has not been implemented in PySpark, an extension has been
+added here to make that possible. In order to save a Pyspark Pipeline with Apache Spark, one will need to use the overwrite function:
+
+```python
+p = Pipeline(stages=[va, encoded, spark_model]).fit(df)
+p.write().overwrite().save("location")
+```
+
+For loading, a Pipeline wrapper has been provided in the pipeline_utils file. An example is below:
+
+```python
+from sparktorch.pipeline_util import PysparkPipelineWrapper
+from pyspark.ml.pipeline import PipelineModel
+
+p = PysparkPipelineWrapper.unwrap(PipelineModel.load('location'))
+``` 
+Then you can perform predictions, etc with:
+
+```python
+predictions = p.transform(df)
+```
+
+
+## Running
+
+One big thing to remember is to add the `--executor cores 1` option to spark to ensure
+each executor is only training one copy of the network. This will especially be needed for gpu training.
+
+## Contributing
+
+Contributions are always welcome. This could be fixing a bug, changing documentation, or adding a new feature. To test 
+new changes against existing tests, we have provided a Docker container which takes in an argument of the python version. 
+This allows the user to check their work before pushing to Github, where travis-ci will run.
+
+For python 3.6
+```
+docker build -t local-test --build-arg PYTHON_VERSION=3.6 .
+docker run --rm local-test:latest bash -i -c "pytest"
+```
 
 ## Literature and Inspiration
 
