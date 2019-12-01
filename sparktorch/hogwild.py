@@ -17,7 +17,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from sparktorch.util import handle_features, load_torch_model, TorchObj, DataObj
+from sparktorch.util import handle_features, load_torch_model, DataObj
 from sparktorch.server import Server
 from pyspark.rdd import RDD
 import requests

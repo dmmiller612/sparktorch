@@ -1,8 +1,8 @@
 # To choose a Python version, first create the env with:
-# conda create -n sparkflow python=3.6
+# conda create -n sparktorch python=3.6
 # and then update it
-# conda env update -n sparkflow -f environment.yml
-name: sparkflow
+# conda env update -n sparktorch -f environment.yml
+name: sparktorch
 channels:
 - https://repo.anaconda.com/pkgs/main/linux-64/
 - pytorch
@@ -13,7 +13,7 @@ dependencies:
 - h5py=2.8.0
 - pillow=4.1.1
 - dill
-- pytorch
+- pytorch=1.2.0
 - flask
 - requests
 # test
@@ -28,3 +28,4 @@ dependencies:
   - prospector==0.12.11
   - argh==0.26.2
   - yapf==0.21.0
+  - pytest

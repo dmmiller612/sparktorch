@@ -18,7 +18,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR TH
 """
 
 import socket
-from multiprocessing import Process
+from torch.multiprocessing import Process
 from flask import Flask, request
 import dill
 from sparktorch.util import load_torch_model, TorchObj
@@ -79,6 +79,7 @@ class Server(object):
         app = Flask(__name__)
         self.app = app
         self.model.train()
+        self.model.share_memory()
         lock = RWLock()
         lock_acquired = self.acquire_lock
         window_len = self.window_len
@@ -91,8 +92,8 @@ class Server(object):
         @app.route('/parameters', methods=['GET'])
         def get_parameters():
             if lock_acquired:
-                lock.acquire_read()
-            state = dill.dumps(self.state_dict)
+                lock.acquire_write()
+            state = dill.dumps(self.model.state_dict())
             if lock_acquired:
                 lock.release()
             return state
@@ -133,8 +134,6 @@ class Server(object):
                     param.grad = gradients[index]
 
                 self.optimizer.step()
-
-                self.state_dict = self.model.state_dict()
 
             except Exception as e:
                 self.error_count += 1
