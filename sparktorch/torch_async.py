@@ -137,6 +137,7 @@ class SparkTorch(
 
     torchObj = Param(Params._dummy(), "torchObj", "", typeConverter=TypeConverters.toString)
     mode = Param(Params._dummy(), "mode", "", typeConverter=TypeConverters.toString)
+    device = Param(Params._dummy(), "device", "", typeConverter=TypeConverters.toString)
     iters = Param(Params._dummy(), "iters", "", typeConverter=TypeConverters.toInt)
     partitions = Param(Params._dummy(), "partitions", "", typeConverter=TypeConverters.toInt)
     verbose = Param(Params._dummy(), "verbose", "", typeConverter=TypeConverters.toInt)
@@ -167,7 +168,8 @@ class SparkTorch(
         earlyStopPatience=None,
         miniBatch=None,
         validationPct=None,
-        mode=None
+        mode=None,
+        device=None
     ):
         super().__init__()
         self._setDefault(
@@ -186,7 +188,8 @@ class SparkTorch(
             earlyStopPatience=-1,
             miniBatch=-1,
             validationPct=0.0,
-            mode='async'
+            mode='async',
+            device='cpu'
         )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -209,7 +212,8 @@ class SparkTorch(
         earlyStopPatience=None,
         miniBatch=None,
         validationPct=None,
-        mode=None
+        mode=None,
+        device=None
     ):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -253,6 +257,9 @@ class SparkTorch(
     def getMode(self):
         return self.getOrDefault(self.mode)
 
+    def getDevice(self):
+        return self.getOrDefault(self.device)
+
     def _fit(self, dataset):
         inp_col = self.getInputCol()
         label = self.getLabelCol()
@@ -271,6 +278,7 @@ class SparkTorch(
         mini_batch = self.getMiniBatch()
         validation_pct = self.getValidationPct()
         mode = self.getMode()
+        device = self.getDevice()
 
         rdd = dataset.rdd.mapPartitions(handle_data(inp_col, label))
 
@@ -290,7 +298,8 @@ class SparkTorch(
                 verbose=verbose,
                 mini_batch=mini_batch,
                 validation_pct=validation_pct,
-                world_size=partitions+1
+                world_size=partitions+1,
+                device=device
             )
         elif mode == 'hogwild':
             if barrier:

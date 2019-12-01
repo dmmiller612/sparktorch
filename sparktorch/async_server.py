@@ -51,12 +51,13 @@ def handle_model(
     world_size: int = 2,
     verbose: int = 1,
     mini_batch: int = -1,
-    validation_pct: float = 0
+    validation_pct: float = 0,
+    device='cpu'
 ):
 
     # Def Load model
     torch_obj = load_torch_model(torch_obj)
-    model = torch_obj.model
+    model = torch_obj.model.to(device)
     model.train()
 
     criterion = torch_obj.criterion
@@ -82,10 +83,10 @@ def handle_model(
         process_generic_model(params, iters)
         return []
 
-    x_train = data_obj.x_train
-    y_train = data_obj.y_train if data_obj.y_train is not None else x_train
-    x_val = data_obj.x_val
-    y_val = data_obj.y_val if data_obj.y_val is not None else x_val
+    x_train = data_obj.x_train.to(device)
+    y_train = data_obj.y_train.to(device) if data_obj.y_train is not None else x_train
+    x_val = data_obj.x_val.to(device) if data_obj.x_val is not None else None
+    y_val = data_obj.y_val.to(device) if data_obj.y_val is not None else x_val
 
     for i in range(iters):
         optimizer.zero_grad()
@@ -137,7 +138,8 @@ def train_async(
     verbose: int = 1,
     mini_batch: int = -1,
     validation_pct: float = 0.0,
-    world_size: int = 2
+    world_size: int = 2,
+    device: str = 'cpu'
 ) -> Dict:
 
     p = Process(target=handle_model,
@@ -157,7 +159,8 @@ def train_async(
                     verbose=verbose,
                     mini_batch=mini_batch,
                     validation_pct=validation_pct,
-                    world_size=world_size
+                    world_size=world_size,
+                    device=device
                 )
             ).collect()
 

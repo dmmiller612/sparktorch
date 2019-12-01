@@ -167,6 +167,24 @@ def test_mini_batch(data, general_model):
     assert 'predictions' in res[0]
 
 
+def test_cpu_device(data, general_model):
+    stm = SparkTorch(
+        inputCol='features',
+        labelCol='label',
+        predictionCol='predictions',
+        torchObj=general_model,
+        iters=10,
+        verbose=1,
+        partitions=2,
+        miniBatch=5,
+        acquireLock=True,
+        device='cpu'
+    ).fit(data)
+
+    res = stm.transform(data).take(1)
+    assert 'predictions' in res[0]
+
+
 def test_validation_pct(data, general_model):
     stm = SparkTorch(
         inputCol='features',
