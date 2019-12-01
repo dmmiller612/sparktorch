@@ -34,9 +34,9 @@ def mapPartitionsWithIndex(rdd, f, preservesPartitioning=False):
     return PipelinedRDD(rdd, f, preservesPartitioning, isFromBarrier=True)
 
 
-def process_generic_model(model, world_size, iters):
+def process_generic_model(params, iters):
     for i in range(iters):
-        for p in model:
+        for p in params:
             z = torch.zeros_like(p)
             dist.all_reduce(z, op=torch.distributed.ReduceOp.SUM)
 
@@ -53,11 +53,15 @@ def handle_model(
     validation_pct: float = 0
 ):
 
+    # Def Load model
     torch_obj = load_torch_model(torch_obj)
     model = torch_obj.model
     model.train()
+
     criterion = torch_obj.criterion
     optimizer = torch_obj.optimizer
+
+    # Initialize zero params for -1 index
     params = [torch.zeros_like(p) for p in model.parameters()]
 
     if dist.is_initialized():
@@ -67,14 +71,15 @@ def handle_model(
     os.environ['MASTER_PORT'] = '5000'
     dist.init_process_group('gloo', rank=index + 1, world_size=world_size, timeout=timedelta(seconds=60))
     partition_id = str(uuid4())
+
     if data is None:
-        process_generic_model(params, world_size, iters)
-        return [model.state_dict()]
+        process_generic_model(params, iters)
+        return []
 
     data_obj = handle_features(data, validation_pct)
     if data_obj.x_train is None:
-        process_generic_model(params, world_size, iters)
-        return [model.state_dict()]
+        process_generic_model(params, iters)
+        return []
 
     x_train = data_obj.x_train
     y_train = data_obj.y_train if data_obj.y_train is not None else x_train
@@ -159,13 +164,8 @@ def train_async(
                 num_partitions = rdd.getNumPartitions()
                 rdd = rdd.repartition(num_partitions)
 
-        p.terminate()
-        p.join()
-        #dist.destroy_process_group()
-
         return state_dict[0]
 
     finally:
         p.terminate()
         p.join()
-        #dist.destroy_process_group()

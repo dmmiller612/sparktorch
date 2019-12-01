@@ -58,16 +58,14 @@ torch_obj = serialize_torch_obj(
 # Setup features
 vector_assembler = VectorAssembler(inputCols=df.columns[1:785], outputCol='features')
 
-# Create a SparkTorch Model with barrier execution
+# Create a SparkTorch Model with barrier execution and torch server.
 spark_model = SparkTorch(
     inputCol='features',
     labelCol='_c0',
     predictionCol='predictions',
     torchObj=torch_obj,
     iters=50,
-    partitions=4,
-    verbose=1,
-    useBarrier=True
+    verbose=1
 )
 
 # Can be used in a pipeline and saved.
