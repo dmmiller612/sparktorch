@@ -1,5 +1,8 @@
 # SparkTorch
 
+[![Build Status](https://travis-ci.com/dmmiller612/sparktorch.svg?branch=master)](https://travis-ci.org/dmmiller612/sparktorch)
+[![license](https://img.shields.io/github/license/mashape/apistatus.svg?maxAge=2592000)](https://github.com/dmmiller612/sparktorch)
+
 This is an implementation of Pytorch on Spark. The goal of this library is to provide a simple, understandable interface 
 in using Torch on Spark. With SparkTorch, you can easily integrate your deep learning model with a ML Spark Pipeline.
 Underneath, SparkTorch uses a parameter server to train the Pytorch network in a distributed manner. Through the api,
@@ -23,7 +26,7 @@ training.
 
 Install SparkTorch via pip: `pip install sparktorch`
 
-SparkTorch requires Apache Spark >= 2.4.4, and has only been tested on PyTorch versions >= 1.2.0.
+SparkTorch requires Apache Spark >= 2.4.4, and has only been tested on PyTorch versions >= 1.3.0.
 
 ## Full Basic Example
 
@@ -59,6 +62,7 @@ torch_obj = serialize_torch_obj(
 vector_assembler = VectorAssembler(inputCols=df.columns[1:785], outputCol='features')
 
 # Create a SparkTorch Model with barrier execution and torch server.
+# Mode is set to async
 spark_model = SparkTorch(
     inputCol='features',
     labelCol='_c0',
@@ -72,6 +76,8 @@ spark_model = SparkTorch(
 p = Pipeline(stages=[vector_assembler, spark_model]).fit(df)
 p.save('simple_dnn')
 ```
+
+### Options Overview
 
 
 ## Literature and Inspiration

@@ -35,6 +35,7 @@ def mapPartitionsWithIndex(rdd, f, preservesPartitioning=False):
 
 
 def process_generic_model(params, iters):
+    # Hopefully this function can go away in newer versions.
     for i in range(iters):
         for p in params:
             z = torch.zeros_like(p)
