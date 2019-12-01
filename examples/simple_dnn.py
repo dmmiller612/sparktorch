@@ -30,7 +30,7 @@ if __name__ == '__main__':
         model=network,
         criterion=nn.CrossEntropyLoss(),
         optimizer=torch.optim.Adam,
-        lr=0.00001
+        lr=0.001
     )
 
     # Setup features
@@ -46,7 +46,7 @@ if __name__ == '__main__':
         iters=1500,
         verbose=1,
         useBarrier=True,
-        miniBatch=128,
+        miniBatch=256,
         validationPct=0.2
     )
 
