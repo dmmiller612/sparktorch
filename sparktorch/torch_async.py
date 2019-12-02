@@ -25,7 +25,6 @@ from sparktorch.async_server import train_async
 import numpy as np
 import torch
 import codecs
-import socket
 
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasPredictionCol, HasLabelCol
@@ -135,7 +134,7 @@ class SparkTorch(
     Identifiable
 ):
 
-    torchObj = Param(Params._dummy(), "torchObj", "", typeConverter=TypeConverters.toString)
+    torchObj = Param(Params._dummy(), "torchObj", "The serialized torch object", typeConverter=TypeConverters.toString)
     mode = Param(Params._dummy(), "mode", "", typeConverter=TypeConverters.toString)
     device = Param(Params._dummy(), "device", "", typeConverter=TypeConverters.toString)
     iters = Param(Params._dummy(), "iters", "", typeConverter=TypeConverters.toInt)
@@ -299,7 +298,8 @@ class SparkTorch(
                 mini_batch=mini_batch,
                 validation_pct=validation_pct,
                 world_size=partitions+1,
-                device=device
+                device=device,
+                early_stop_patience=early_stop_patience
             )
         elif mode == 'hogwild':
             if barrier:

@@ -43,10 +43,11 @@ if __name__ == '__main__':
         labelCol='_c0',
         predictionCol='predictions',
         torchObj=torch_obj,
-        iters=1500,
+        iters=1000,
         verbose=1,
         useBarrier=True,
         miniBatch=256,
+        earlyStopPatience=10,
         validationPct=0.2
     )
 

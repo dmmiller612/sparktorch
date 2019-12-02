@@ -39,11 +39,10 @@ if __name__ == '__main__':
         labelCol='_c0',
         predictionCol='predictions',
         torchObj=torch_obj,
-        iters=1000,
+        iters=50,
         verbose=1,
-        useBarrier=True,
         validationPct=0.2,
-        miniBatch=64
+        miniBatch=128
     )
 
     # Create and save the Pipeline
