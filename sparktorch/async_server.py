@@ -53,7 +53,7 @@ def process_generic_model(params: List[Tensor], iters: int, should_stop: Tensor,
 
         if has_early_stop:
             dist.all_reduce(should_stop, op=torch.distributed.ReduceOp.SUM)
-            if should_stop > 0:
+            if should_stop.item() > 0:
                 break
         else:
             print("STOPPING")
@@ -180,7 +180,7 @@ def handle_model(
                 should_stop = should_stop + 1.0
 
             dist.all_reduce(should_stop, op=torch.distributed.ReduceOp.SUM)
-            if should_stop > 0:
+            if should_stop.item() > 0:
                 break
 
         optimizer.step()
