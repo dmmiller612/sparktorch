@@ -61,7 +61,6 @@ def test_simple_sequential(data, sequential_model):
 
 
 def test_simple_torch_module(data, general_model):
-    print("IN HERE")
     stm = SparkTorch(
         inputCol='features',
         labelCol='label',
@@ -140,10 +139,23 @@ def test_early_stopping(data, general_model):
         torchObj=general_model,
         iters=25,
         verbose=1,
-        partitions=2,
         mode='hogwild',
-        earlyStopPatience=1,
-        acquireLock=True
+        earlyStopPatience=5
+    ).fit(data)
+
+    res = stm.transform(data).take(1)
+    assert 'predictions' in res[0]
+
+
+def test_early_stopping_async(data, general_model):
+    stm = SparkTorch(
+        inputCol='features',
+        labelCol='label',
+        predictionCol='predictions',
+        torchObj=general_model,
+        iters=25,
+        verbose=1,
+        earlyStopPatience=2
     ).fit(data)
 
     res = stm.transform(data).take(1)
