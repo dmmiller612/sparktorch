@@ -2,11 +2,11 @@ from setuptools import setup
 from setuptools import find_packages
 
 setup(name='sparktorch',
-      version='0.0.4',
+      version='0.0.5',
       description='Deep learning on Apache Spark with Pytorch',
       keywords = ['pytorch', 'spark', 'sparktorch', 'machine learning', 'deep learning'],
       url='https://github.com/dmmiller612/sparktorch',
-      download_url='https://github.com/dmmiller612/sparktorch/archive/0.0.4.tar.gz',
+      download_url='https://github.com/dmmiller612/sparktorch/archive/0.0.5.tar.gz',
       author='Derek Miller',
       author_email='dmmiller612@gmail.com',
       long_description=open("README.md", "r", encoding='utf-8').read(),
