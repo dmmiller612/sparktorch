@@ -129,24 +129,6 @@ def test_classification(data):
     res = stm.transform(data).take(1)
     assert 'predictions' in res[0]
 
-
-def test_early_stopping(data, general_model):
-
-    stm = SparkTorch(
-        inputCol='features',
-        labelCol='label',
-        predictionCol='predictions',
-        torchObj=general_model,
-        iters=25,
-        verbose=1,
-        mode='hogwild',
-        earlyStopPatience=5
-    ).fit(data)
-
-    res = stm.transform(data).take(1)
-    assert 'predictions' in res[0]
-
-
 def test_early_stopping_async(data, general_model):
     stm = SparkTorch(
         inputCol='features',
