@@ -17,7 +17,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from sparktorch.util import handle_features, load_torch_model, DataObj
+from sparktorch.util import handle_features, load_torch_model, DataObj, load_base_torch
 from sparktorch.server import Server
 from pyspark.rdd import RDD
 import requests
@@ -154,6 +154,8 @@ def train(
     validation_pct: float = 0.0
 ) -> Dict:
     try:
+        torch_obj, _ = load_base_torch(torch_obj)
+
         master_url = str(server.master_url)
 
         for i in range(partition_shuffles):

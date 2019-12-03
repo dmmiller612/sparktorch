@@ -89,6 +89,10 @@ class SparkTorchModel(Model, HasInputCol, HasPredictionCol, PysparkReaderWriter,
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    def getPytorchModel(self):
+        mod_str = self.getOrDefault(self.modStr)
+        return dill.loads(codecs.decode(mod_str.encode(), "base64"))
+
     def _transform(self, dataset):
         inp = self.getOrDefault(self.inputCol)
         out = self.getOrDefault(self.predictionCol)
@@ -287,7 +291,9 @@ class SparkTorch(
         partitions = partitions if partitions > 0 else rdd.getNumPartitions()
 
         master_url = SparkContext._active_spark_context.getConf().get("spark.driver.host").__str__()
+
         if mode == 'async':
+
             state_dict = train_async(
                 rdd=rdd,
                 torch_obj=torch_obj,
@@ -301,9 +307,12 @@ class SparkTorch(
                 device=device,
                 early_stop_patience=early_stop_patience
             )
+
         elif mode == 'hogwild':
+
             if barrier:
                 rdd = rdd.barrier()
+
             server = Server(
                 torch_obj=torch_obj,
                 master_url=master_url + ":" + str(port),
@@ -324,10 +333,11 @@ class SparkTorch(
                 mini_batch=mini_batch,
                 validation_pct=validation_pct
             )
-        else:
-            raise RuntimeError(f"mode: {mode} not recognized.")
 
-        loaded = load_torch_model(torch_obj)
+        else:
+            raise RuntimeError(f"Mode: {mode} not recognized.")
+
+        loaded = load_torch_model(torch_obj, from_json=True)
         model = loaded.model
         model.load_state_dict(state_dict)
         dumped_model = codecs.encode(dill.dumps(model), "base64").decode()

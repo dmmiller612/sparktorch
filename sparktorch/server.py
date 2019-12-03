@@ -21,7 +21,7 @@ import socket
 from torch.multiprocessing import Process
 from flask import Flask, request
 import dill
-from sparktorch.util import load_torch_model, TorchObj
+from sparktorch.util import load_torch_model, TorchObj, load_base_torch
 from sparktorch.rw_lock import RWLock
 from sparktorch.early_stopper import EarlyStopping
 
@@ -41,6 +41,7 @@ class Server(object):
         early_stop_patience:int = 1,
         window_len: int = 4
     ):
+        torch_obj, _ = load_base_torch(torch_obj)
         self.torch_obj = load_torch_model(torch_obj)
 
         self.model = self.torch_obj.model
