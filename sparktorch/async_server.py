@@ -17,19 +17,19 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from sparktorch.util import handle_features, load_torch_model, DataObj
+from sparktorch.util import handle_features, load_torch_model, DataObj, load_base_torch
 from sparktorch.early_stopper import EarlyStopping
+import sys
 from pyspark.rdd import RDD
-from typing import Dict, List
+from typing import Dict, List, Union
 from uuid import uuid4
 import numpy as np
 from pyspark.rdd import PipelinedRDD
 import torch
-from torch.tensor import Tensor
-import torch.distributed as dist
 from torch.multiprocessing import Process
+import torch.distributed as dist
+
 import os
-from datetime import timedelta
 
 
 def mapPartitionsWithIndex(rdd, f, preservesPartitioning=False):
@@ -39,7 +39,7 @@ def mapPartitionsWithIndex(rdd, f, preservesPartitioning=False):
     return PipelinedRDD(rdd, f, preservesPartitioning, isFromBarrier=True)
 
 
-def process_generic_model(params: List[Tensor], iters: int, should_stop: Tensor, has_early_stop: bool = False):
+def process_generic_model(params: List, iters: int, has_early_stop: bool = False):
     """
     Runs a mock training with zero grads. This is due to a bug where the connection gets reset with custom new groups.
     :param params: The params of the model
@@ -48,21 +48,20 @@ def process_generic_model(params: List[Tensor], iters: int, should_stop: Tensor,
     # Hopefully this function can go away in newer versions.
     for i in range(iters):
         for p in params:
-            z = torch.zeros_like(p)
+            z = torch.zeros(p)
             dist.all_reduce(z, op=torch.distributed.ReduceOp.SUM)
 
         if has_early_stop:
-            dist.all_reduce(should_stop, op=torch.distributed.ReduceOp.SUM)
-            if should_stop.item() > 0:
+            zeros = torch.zeros(1)
+            dist.all_reduce(zeros, op=torch.distributed.ReduceOp.SUM)
+            if zeros.item() > 0:
                 break
-        else:
-            print("STOPPING")
 
 
 def handle_model(
     index: int,
     data: List[DataObj],
-    torch_obj: str,
+    torch_obj: Union[str, List],
     master_url: str = '127.0.0.1',
     iters: int = 1000,
     world_size: int = 2,
@@ -90,42 +89,46 @@ def handle_model(
     :return: A list of the model state dictionary.
     """
 
-    # Def Load model
-    torch_obj = load_torch_model(torch_obj)
-    model = torch_obj.model.to(device)
-    model.train()
-
-    criterion = torch_obj.criterion
-    optimizer = torch_obj.optimizer
-
-    # Initialize zero params for -1 index to fake train.
-    params = [torch.zeros_like(p) for p in model.parameters()]
-
+    # If a process has already been setup on the machine, kill it.
     if dist.is_initialized():
         dist.destroy_process_group()
 
     # Set up the distributed server.
+    master_url = master_url
     os.environ['MASTER_ADDR'] = master_url
-    os.environ['MASTER_PORT'] = '5000'
-    dist.init_process_group('gloo', rank=index + 1, world_size=world_size, timeout=timedelta(seconds=60))
+    os.environ['MASTER_PORT'] = '3333'
 
+    dist.init_process_group('gloo', rank=index + 1, world_size=world_size)
+
+    # Def Load model
+    if index == -1:
+        process_generic_model(torch_obj, iters, early_stop_patience > 0)
+        return []
+    else:
+        torch_obj = load_torch_model(torch_obj)
+
+    # Loaded the model
+    model = torch_obj.model.to(device)
+    model.train()
+    criterion = torch_obj.criterion
+    optimizer = torch_obj.optimizer
+
+    # Set up early stopping
     es = EarlyStopping(patience=early_stop_patience)
     should_stop = torch.zeros(1)
     has_early_stop = early_stop_patience > 0
 
     partition_id = str(uuid4())
 
-    # If data is none, we still need to mock it out, since it is apart of the world.
-    if data is None:
-        process_generic_model(params, iters, should_stop, has_early_stop)
-        return []
-
     # Process the data. Converts to x_train, y_train, x_val, y_val
     data_obj = handle_features(data, validation_pct)
-    if data_obj.x_train is None:
-        process_generic_model(params, iters, should_stop, has_early_stop)
+
+    # check if data is none. We will still need to register.
+    if data_obj is None or data_obj.x_train is None:
+        process_generic_model([list(p.shape) for p in model.parameters()], iters, early_stop_patience > 0)
         return []
 
+    # Passes all of the data
     x_train = data_obj.x_train.to(device)
     y_train = data_obj.y_train.to(device) if data_obj.y_train is not None else x_train
     x_val = data_obj.x_val.to(device) if data_obj.x_val is not None else None
@@ -173,6 +176,7 @@ def handle_model(
             dist.all_reduce(param.grad.data, op=torch.distributed.ReduceOp.SUM)
             param.grad.data /= (world_size-1)
 
+        # Processes the early stop work
         if has_early_stop:
             loss_to_use = val_loss if val_loss is not None else loss_v
             stop = es.step(loss_to_use)
@@ -208,7 +212,7 @@ def train_async(
     Entry point to asynchronously train the model.
 
     :param rdd: The rdd of data to run on the model.
-    :param torch_obj: The torch object as a string that includes the model.
+    :param torch_obj: The torch object as a string that includes the model and param shapes.
     :param master_url: The main url for the driver.
     :param iters: Number of iterations for training.
     :param partition_shuffles: Number of partition shuffles (Need to implement)
@@ -217,24 +221,29 @@ def train_async(
     :param validation_pct: How many items to validate
     :param world_size: number of partitions.
     :param device: pytorch device
+
     :return: The train dict.
     """
 
+    torch_loaded, params = load_base_torch(torch_obj)
+
     # Start the driver process.
-    p = Process(target=handle_model,
-                args=(-1, None, torch_obj, master_url, iters, world_size, early_stop_patience))
+    p = Process(
+        target=handle_model,
+        args=(-1, None, params, master_url, iters, world_size, early_stop_patience)
+    )
     p.start()
 
     try:
         state_dict = None
-
         for i in range(partition_shuffles):
+
             # Run model with barrier execution mode.
             state_dict = mapPartitionsWithIndex(
                 rdd, lambda i, x: handle_model(
                     i,
                     x,
-                    torch_obj=torch_obj,
+                    torch_obj=torch_loaded,
                     master_url=master_url,
                     iters=iters,
                     verbose=verbose,

@@ -4,7 +4,7 @@ import numpy as np
 from pyspark.ml.linalg import Vectors
 import torch.nn as nn
 import torch
-from sparktorch.util import serialize_torch_obj
+from sparktorch.util import serialize_torch_obj, serialize_torch_obj_lazy
 from sparktorch.torch_async import SparkTorch
 from sparktorch.tests.simple_net import Net, AutoEncoder, ClassificationNet
 
@@ -38,11 +38,50 @@ def sequential_model():
 
 
 @pytest.fixture()
+def lazy_model():
+    model = serialize_torch_obj_lazy(
+        Net, nn.MSELoss, torch.optim.Adam, optimizer_params={'lr': 0.001}
+    )
+    return model
+
+
+@pytest.fixture()
 def general_model():
     model = serialize_torch_obj(
         Net(), nn.MSELoss(), torch.optim.Adam, lr=0.001
     )
     return model
+
+
+def test_lazy(lazy_model, data):
+    stm = SparkTorch(
+        inputCol='features',
+        labelCol='label',
+        predictionCol='predictions',
+        torchObj=lazy_model,
+        verbose=1,
+        iters=5
+    ).fit(data)
+
+    res = stm.transform(data).take(1)
+    assert 'predictions' in res[0]
+    assert type(res[0]['predictions']) is float
+
+
+def test_simple_hogwild(data, sequential_model):
+    stm = SparkTorch(
+        inputCol='features',
+        labelCol='label',
+        predictionCol='predictions',
+        torchObj=sequential_model,
+        verbose=1,
+        mode='hogwild',
+        iters=5
+    ).fit(data)
+
+    res = stm.transform(data).take(1)
+    assert 'predictions' in res[0]
+    assert type(res[0]['predictions']) is float
 
 
 def test_simple_sequential(data, sequential_model):
@@ -128,6 +167,7 @@ def test_classification(data):
 
     res = stm.transform(data).take(1)
     assert 'predictions' in res[0]
+
 
 def test_early_stopping_async(data, general_model):
     stm = SparkTorch(
