@@ -34,7 +34,7 @@ TorchObj = collections.namedtuple(
 DataObj = collections.namedtuple('DataObj', ['x_train', 'y_train', 'x_val', 'y_val'])
 
 
-def torch_encoder(obj):
+def torch_encoder(obj) -> str:
     """
     Encodes Torch Object or anything related
     :param obj: any object
@@ -45,7 +45,7 @@ def torch_encoder(obj):
     ).decode()
 
 
-def torch_decoder(model_ser: str):
+def torch_decoder(model_ser: str) -> Any:
     """
     Decodes the torch object or model
     :param model_ser: Serialized object
@@ -54,7 +54,15 @@ def torch_decoder(model_ser: str):
     return dill.loads(codecs.decode(model_ser.encode(), "base64"))
 
 
-def handle_features(data: List[DataObj], validation_pct: float=0.0) -> DataObj:
+def handle_features(data: List[DataObj], validation_pct: float = 0.0) -> DataObj:
+    """
+    Processes features and converts them to torch tensors.
+
+    :param data: The initial data is numpy vectors
+    :param validation_pct: Percentage to use for a validation set
+    :return: A DataObj with tensors
+
+    """
     x_train = []
     y_train = []
 
@@ -93,17 +101,29 @@ def handle_features(data: List[DataObj], validation_pct: float=0.0) -> DataObj:
 
 
 def load_base_torch(torch_obj: str) -> Tuple:
+    """
+    Loads the base torch object from json.
+    :param torch_obj: The json torch object
+    :return: a tuple of the torch object and the shapes of the parameters.
+    """
     obj = json.loads(torch_obj)
     return obj['torch_obj'], obj['shapes']
 
 
 def load_torch_model(torch_obj: str, from_json: bool = False) -> TorchObj:
+    """
+    Loads the torch object. If it is from json, it will load the json body before handling the request.
+
+    :param torch_obj: The torch object as a serialized string
+    :param from_json: Determines whether we should load from json
+    :return: A loaded model torch object
+    """
     if from_json:
         torch_obj, _ = load_base_torch(torch_obj)
 
     loaded = torch_decoder(torch_obj)
     if loaded.is_lazy:
-        model = loaded.model()
+        model = loaded.model(**loaded.model_parameters) if loaded.model_parameters else loaded.model()
         return TorchObj(
             model=model,
             criterion=loaded.criterion(),
@@ -132,7 +152,17 @@ def serialize_torch_obj_lazy(
     optimizer_params: Dict = None,
     model_parameters: Dict = None
 ) -> str:
-    ps = [list(ps.shape) for ps in model().parameters()]
+    """
+    Lazily serializes a torch object.
+    :param model: The network's class that you want to run.
+    :param criterion: The class of the criterion.
+    :param optimizer: The class of the optimizer.
+    :param optimizer_params: The optimizer parameters as a dictionary.
+    :param model_parameters: The model parameters as a dictionary.
+    :return: a serialized json string of the torch model parameters.
+    """
+    tmp_mod = model(**model_parameters) if model_parameters else model()
+    params = [list(ps.shape) for ps in tmp_mod.parameters()]
     model_encoded = torch_encoder(
         TorchObj(
             model=model,
@@ -145,7 +175,7 @@ def serialize_torch_obj_lazy(
     )
     return json.dumps({
         'torch_obj': model_encoded,
-        'shapes': ps
+        'shapes': params
     })
 
 

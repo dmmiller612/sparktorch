@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.com/dmmiller612/sparktorch.svg?branch=master)](https://travis-ci.org/dmmiller612/sparktorch)
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg?maxAge=2592000)](https://github.com/dmmiller612/sparktorch)
 
-This is an implementation of Pytorch on Spark. The goal of this library is to provide a simple, understandable interface 
+This is an implementation of Pytorch on Apache Spark. The goal of this library is to provide a simple, understandable interface 
 in using Torch on Spark. With SparkTorch, you can easily integrate your deep learning model with a ML Spark Pipeline.
 Underneath, SparkTorch uses a parameter server to train the Pytorch network in a distributed manner. Through the api,
 the user can specify the style of training, whether that is Hogwild or async with locking.
@@ -77,6 +77,15 @@ p = Pipeline(stages=[vector_assembler, spark_model]).fit(df)
 p.save('simple_dnn')
 ```
 
+## Run the Examples
+
+You can run the examples through docker by issuing the following commands at the root of the repository:
+```bash
+make docker-build
+make docker-run-dnn
+make docker-run-cnn
+```
+
 ## Documentation
 
 This is a small documentation section on how to SparkTorch. Please look at the examples library for more details.
@@ -97,6 +106,25 @@ torch_obj = serialize_torch_obj(
     lr=0.0001
 )
 ```
+
+When training neural networks on Spark, one issue that many face is OOM errors. To avoid this issue on the driver, you 
+can create a torch object that is only initialized on the worker nodes. To create this object, you can set up the 
+following:
+
+```python
+from sparktorch import serialize_torch_obj_lazy
+
+torch_obj = serialize_torch_obj_lazy(
+    model=Network,
+    criterion=nn.CrossEntropyLoss,
+    optimizer=torch.optim.Adam,
+    optimizer_params={'lr': 0.001},
+    model_parameters={'some_model_param': 5}
+)
+``` 
+
+The Network in the above example must be a nn.module pytorch class. If you need parameters passed into the constructor, 
+you can use the `model_parameters` parameter. The item will be passed in as **kwargs to the constructor. 
 
 NOTE: One thing to remember is that if your network is not a sequential, it will need to be saved in a separate file and
 available in the python path. An example of this can be found in `simple_cnn.py`.
@@ -153,7 +181,6 @@ Then you can perform predictions, etc with:
 ```python
 predictions = p.transform(df)
 ```
-
 
 ## Running
 

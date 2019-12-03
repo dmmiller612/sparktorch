@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch
 from sparktorch.util import serialize_torch_obj, serialize_torch_obj_lazy
 from sparktorch.torch_async import SparkTorch
-from sparktorch.tests.simple_net import Net, AutoEncoder, ClassificationNet
+from sparktorch.tests.simple_net import Net, AutoEncoder, ClassificationNet, NetworkWithParameters
 
 
 @pytest.fixture()
@@ -51,6 +51,32 @@ def general_model():
         Net(), nn.MSELoss(), torch.optim.Adam, lr=0.001
     )
     return model
+
+
+@pytest.fixture()
+def network_with_params():
+    return serialize_torch_obj_lazy(
+        NetworkWithParameters,
+        nn.MSELoss,
+        torch.optim.Adam,
+        optimizer_params={'lr': 0.001},
+        model_parameters={'param': 40}
+    )
+
+
+def test_model_parameters(data, network_with_params):
+    stm = SparkTorch(
+        inputCol='features',
+        labelCol='label',
+        predictionCol='predictions',
+        torchObj=network_with_params,
+        verbose=1,
+        iters=5
+    ).fit(data)
+
+    py_model = stm.getPytorchModel()
+    assert py_model.fc1 is not None
+    assert py_model.fc2 is not None
 
 
 def test_lazy(lazy_model, data):

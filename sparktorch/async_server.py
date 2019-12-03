@@ -19,7 +19,6 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR TH
 
 from sparktorch.util import handle_features, load_torch_model, DataObj, load_base_torch
 from sparktorch.early_stopper import EarlyStopping
-import sys
 from pyspark.rdd import RDD
 from typing import Dict, List, Union
 from uuid import uuid4
