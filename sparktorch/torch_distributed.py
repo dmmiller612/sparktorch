@@ -21,7 +21,7 @@ from sparktorch.pipeline_util import PysparkReaderWriter
 from sparktorch.util import DataObj, load_torch_model
 from sparktorch.server import Server
 from sparktorch.hogwild import train, get_main
-from sparktorch.async_server import train_async
+from sparktorch.distributed import train_distributed
 import numpy as np
 import torch
 import codecs
@@ -139,7 +139,7 @@ class SparkTorch(
 ):
 
     torchObj = Param(Params._dummy(), "torchObj", "The serialized torch object", typeConverter=TypeConverters.toString)
-    mode = Param(Params._dummy(), "mode", "", typeConverter=TypeConverters.toString)
+    mode = Param(Params._dummy(), "mode", "The training mode", typeConverter=TypeConverters.toString)
     device = Param(Params._dummy(), "device", "", typeConverter=TypeConverters.toString)
     iters = Param(Params._dummy(), "iters", "", typeConverter=TypeConverters.toInt)
     partitions = Param(Params._dummy(), "partitions", "", typeConverter=TypeConverters.toInt)
@@ -191,7 +191,7 @@ class SparkTorch(
             earlyStopPatience=-1,
             miniBatch=-1,
             validationPct=0.0,
-            mode='async',
+            mode='synchronous',
             device='cpu'
         )
         kwargs = self._input_kwargs
@@ -292,9 +292,9 @@ class SparkTorch(
 
         master_url = SparkContext._active_spark_context.getConf().get("spark.driver.host").__str__()
 
-        if mode == 'async':
+        if mode == 'synchronous':
 
-            state_dict = train_async(
+            state_dict = train_distributed(
                 rdd=rdd,
                 torch_obj=torch_obj,
                 master_url=master_url,

@@ -4,24 +4,24 @@
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg?maxAge=2592000)](https://github.com/dmmiller612/sparktorch)
 
 This is an implementation of Pytorch on Apache Spark. The goal of this library is to provide a simple, understandable interface 
-in using Torch on Spark. With SparkTorch, you can easily integrate your deep learning model with a ML Spark Pipeline.
-Underneath, SparkTorch uses a parameter server to train the Pytorch network in a distributed manner. Through the api,
-the user can specify the style of training, whether that is Hogwild or async with locking.
+in distributing the training of your Pytorch model on Spark. With SparkTorch, you can easily integrate your deep 
+learning model with a ML Spark Pipeline. Underneath the hood, SparkTorch offers two distributed training approaches 
+through tree reductions and a parameter server. Through the api, the user can specify the style of training, whether 
+that is distributed synchronous or hogwild.
 
 ## Why should I use this?
 
 Like SparkFlow, SparkTorch's main objective is to seamlessly work with Spark's ML Pipelines. This library provides three 
 core components:
 
-* Distributed training for large datasets. Multiple Pytorch models are ran in parallel with one central network that 
-manages gradients. This is useful for training very large datasets that do not fit into a single machine. 
-Barrier execution is also available.
+* Data parallel distributed training for large datasets. SparkTorch offers distributed synchronous and asynchronous training methodologies. 
+This is useful for training very large datasets that do not fit into a single machine.
 * Full integration with Spark's ML library. This ensures that you can save and load pipelines with your trained model.
 * Inference. With SparkTorch, you can load your existing trained model and run inference on billions of records 
 in parallel. 
 
 On top of these features, SparkTorch can utilize barrier execution, ensuring that all executors run concurrently during 
-training. 
+training (This is required for synchronous training approaches). 
 
 ## Install
 
@@ -39,8 +39,8 @@ from pyspark.ml.feature import VectorAssembler
 from pyspark.sql import SparkSession
 from pyspark.ml.pipeline import Pipeline
 
-spark = SparkSession.builder.appName("examples").master('local[4]').getOrCreate()
-df = spark.read.option("inferSchema", "true").csv('mnist_train.csv').coalesce(4)
+spark = SparkSession.builder.appName("examples").master('local[2]').getOrCreate()
+df = spark.read.option("inferSchema", "true").csv('mnist_train.csv').coalesce(2)
 
 network = nn.Sequential(
     nn.Linear(784, 256),
@@ -85,6 +85,8 @@ make docker-build
 make docker-run-dnn
 make docker-run-cnn
 ```
+
+For the cnn example, you will need to give your docker container at least 8gb of memory.
 
 ## Documentation
 
@@ -155,7 +157,8 @@ useVectorOut: Boolean to describe if you want the model output to be a vector (D
 earlyStopPatience: If greater than 0, it will enforce early stopping based on validation.
 miniBatch: Minibatch size for training per iteration. (Randomly shuffled)
 validationPct: Percentage to use for validation.
-mode: which training mode to use. `async` uses pytorch server. `hogwild` uses the flask service.
+mode: which training mode to use. `synchronous` leverages torch distributed. `hogwild` currently uses the flask service.
+device: Supply 'cpu' or 'cuda'
 ```
 
 #### Saving and Loading Pipelines
@@ -171,7 +174,7 @@ p.write().overwrite().save("location")
 For loading, a Pipeline wrapper has been provided in the pipeline_utils file. An example is below:
 
 ```python
-from sparktorch.pipeline_util import PysparkPipelineWrapper
+from sparktorch import PysparkPipelineWrapper
 from pyspark.ml.pipeline import PipelineModel
 
 p = PysparkPipelineWrapper.unwrap(PipelineModel.load('location'))
@@ -180,6 +183,23 @@ Then you can perform predictions, etc with:
 
 ```python
 predictions = p.transform(df)
+```
+
+#### Getting the pytorch model from the training session
+
+If you just want to get the Pytorch model after training, you can execute the following code:
+
+```python
+stm = SparkTorch(
+    inputCol='features',
+    labelCol='label',
+    predictionCol='predictions',
+    torchObj=network_with_params,
+    verbose=1,
+    iters=5
+).fit(data)
+
+py_model = stm.getPytorchModel()
 ```
 
 ## Running
@@ -201,6 +221,6 @@ docker run --rm local-test:latest bash -i -c "pytest"
 
 ## Literature and Inspiration
 
+* Distributed training: http://seba1511.net/dist_blog/
 * HOGWILD!: A Lock-Free Approach to Parallelizing Stochastic Gradient Descent: https://arxiv.org/pdf/1106.5730.pdf
-* Elephas: https://github.com/maxpumperla/elephas
 * Scaling Distributed Machine Learning with the Parameter Server: https://www.cs.cmu.edu/~muli/file/parameter_server_osdi14.pdf

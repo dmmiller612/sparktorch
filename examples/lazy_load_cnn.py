@@ -16,14 +16,14 @@ if __name__ == '__main__':
         .getOrCreate()
 
     # Read in mnist_train.csv dataset
-    df = spark.read.option("inferSchema", "true").csv('mnist_train.csv').orderBy(rand()).repartition(2)
+    df = spark.read.option("inferSchema", "true").csv('examples/mnist_train.csv').orderBy(rand()).repartition(2)
 
     # Build the pytorch object
     torch_obj = serialize_torch_obj_lazy(
         model=Net,
         criterion=nn.CrossEntropyLoss,
         optimizer=torch.optim.Adam,
-        optimizer_params={'lr': 0.001}
+        optimizer_params={'lr': 0.0003}
     )
 
     # Setup features
@@ -38,8 +38,8 @@ if __name__ == '__main__':
         torchObj=torch_obj,
         iters=100,
         verbose=1,
-        miniBatch=256,
-        earlyStopPatience=10,
+        miniBatch=128,
+        earlyStopPatience=20,
         validationPct=0.2
     )
 

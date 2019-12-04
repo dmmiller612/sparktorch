@@ -5,7 +5,7 @@ from pyspark.ml.linalg import Vectors
 import torch.nn as nn
 import torch
 from sparktorch.util import serialize_torch_obj, serialize_torch_obj_lazy
-from sparktorch.torch_async import SparkTorch
+from sparktorch.torch_distributed import SparkTorch
 from sparktorch.tests.simple_net import Net, AutoEncoder, ClassificationNet, NetworkWithParameters
 
 

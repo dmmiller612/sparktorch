@@ -194,7 +194,7 @@ def handle_model(
     return [model.state_dict()]
 
 
-def train_async(
+def train_distributed(
     rdd: RDD,
     torch_obj: str,
     master_url: str,
@@ -208,7 +208,7 @@ def train_async(
     early_stop_patience: int = -1
 ) -> Dict:
     """
-    Entry point to asynchronously train the model.
+    Entry point to train the model in distributed fashion.
 
     :param rdd: The rdd of data to run on the model.
     :param torch_obj: The torch object as a string that includes the model and param shapes.
