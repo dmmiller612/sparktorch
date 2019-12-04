@@ -1,0 +1,25 @@
+version: '3'
+services:
+  master:
+    image: local-test:latest
+    hostname: master
+    environment:
+      - MASTER=spark://master:7077
+      - PYSPARK_PYTHON python
+    entrypoint: bash -i -c "service ssh restart && spark-class org.apache.spark.deploy.master.Master -h master"
+    ports:
+    - "4040:4040" # driver UI
+    - "8080:8080" # master UI
+    - "4041:40401"
+    - "7077:7077"
+    volumes:
+    - .:/mnt/sparktorch
+  worker:
+    image: local-test:latest
+    entrypoint: bash -i -c "service ssh restart && spark-class org.apache.spark.deploy.worker.Worker spark://master:7077"
+    ports:
+    - "8081-8090:8081" # worker UI
+    links:
+    - master
+    volumes:
+    - .:/mnt/sparktorch

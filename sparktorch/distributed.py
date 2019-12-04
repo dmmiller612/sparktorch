@@ -31,7 +31,7 @@ import torch.distributed as dist
 import os
 
 
-def mapPartitionsWithIndex(rdd, f, preservesPartitioning=False):
+def mapPartitionsWithIndex(rdd, f, preservesPartitioning=True):
     """
     Temporary function for barrier map partitions.
     """
@@ -87,6 +87,8 @@ def handle_model(
 
     :return: A list of the model state dictionary.
     """
+
+    print("IN A PROCESS")
 
     # If a process has already been setup on the machine, kill it.
     if dist.is_initialized():
@@ -223,7 +225,7 @@ def train_distributed(
 
     :return: The train dict.
     """
-
+    print(f'WORKERS {world_size}, RDD: {rdd.getNumPartitions()}')
     torch_loaded, params = load_base_torch(torch_obj)
 
     # Start the driver process.

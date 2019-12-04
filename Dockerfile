@@ -37,10 +37,12 @@ RUN wget --quiet $SPARK_BUILD_URL -O /tmp/spark.tgz && \
 
 ENV SPARK_HOME /opt/spark
 ENV PATH $SPARK_HOME/bin:$PATH
-ENV PYTHONPATH /opt/spark/python/lib/py4j-0.10.7-src.zip:/opt/spark/python/lib/pyspark.zip:$PYTHONPATH
+ENV PYTHONPATH /mnt/sparktorch:/opt/spark/python/lib/py4j-0.10.7-src.zip:/opt/spark/python/lib/pyspark.zip:$PYTHONPATH
 ENV PYSPARK_PYTHON python
 
 VOLUME /mnt/sparktorch
 WORKDIR /mnt/sparktorch
 
 COPY . /mnt/sparktorch
+
+EXPOSE 3333
