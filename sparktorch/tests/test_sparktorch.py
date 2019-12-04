@@ -4,6 +4,7 @@ import numpy as np
 from pyspark.ml.linalg import Vectors
 import torch.nn as nn
 import torch
+from sparktorch.inference import create_spark_torch_model
 from sparktorch.util import serialize_torch_obj, serialize_torch_obj_lazy
 from sparktorch.torch_distributed import SparkTorch
 from sparktorch.tests.simple_net import Net, AutoEncoder, ClassificationNet, NetworkWithParameters
@@ -77,6 +78,29 @@ def test_model_parameters(data, network_with_params):
     py_model = stm.getPytorchModel()
     assert py_model.fc1 is not None
     assert py_model.fc2 is not None
+
+
+def test_inference(lazy_model, data):
+    stm = SparkTorch(
+        inputCol='features',
+        labelCol='label',
+        predictionCol='predictions',
+        torchObj=lazy_model,
+        verbose=1,
+        iters=10
+    ).fit(data)
+
+    first_res = stm.transform(data).take(1)
+
+    res = stm.getPytorchModel()
+    spark_model = create_spark_torch_model(
+        res,
+        'features',
+        'predictions'
+    )
+
+    res = spark_model.transform(data).take(1)
+    assert first_res == res
 
 
 def test_lazy(lazy_model, data):
@@ -259,3 +283,4 @@ def test_validation_pct(data, general_model):
 
     res = stm.transform(data).take(1)
     assert 'predictions' in res[0]
+

@@ -185,7 +185,7 @@ Then you can perform predictions, etc with:
 predictions = p.transform(df)
 ```
 
-#### Getting the pytorch model from the training session
+#### Getting the Pytorch model from the training session
 
 If you just want to get the Pytorch model after training, you can execute the following code:
 
@@ -200,6 +200,24 @@ stm = SparkTorch(
 ).fit(data)
 
 py_model = stm.getPytorchModel()
+```
+
+
+#### Using a pretrained Pytorch model for inference
+
+If you already have a trained Pytorch model, you can attach it your existing pipeline by directly creating a SparkTorchModel. 
+This can be done by running the following:
+
+```python
+from sparktorch import create_spark_torch_model
+
+net = ... # Pretrained Network
+
+spark_torch_model = create_spark_torch_model(
+    net, 
+    inputCol='features',
+    predictionCol='predictions'
+)
 ```
 
 ## Running

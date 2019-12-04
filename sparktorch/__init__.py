@@ -1,3 +1,4 @@
 from sparktorch.util import serialize_torch_obj, serialize_torch_obj_lazy
 from sparktorch.torch_distributed import SparkTorch
 from sparktorch.pipeline_util import PysparkPipelineWrapper
+from sparktorch.inference import create_spark_torch_model
