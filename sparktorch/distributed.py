@@ -27,8 +27,13 @@ from pyspark.rdd import PipelinedRDD
 import torch
 from torch.multiprocessing import Process
 import torch.distributed as dist
+from socket import gethostbyname, gethostname
 
 import os
+
+
+def retrieve_url() -> str:
+    return os.environ.get("SPARK_LOCAL_IP", gethostbyname(gethostname()))
 
 
 def mapPartitionsWithIndex(rdd, f, preservesPartitioning=False):
@@ -93,7 +98,6 @@ def handle_model(
         dist.destroy_process_group()
 
     # Set up the distributed server.
-    master_url = master_url
     os.environ['MASTER_ADDR'] = master_url
     os.environ['MASTER_PORT'] = '3333'
 
@@ -197,7 +201,6 @@ def handle_model(
 def train_distributed(
     rdd: RDD,
     torch_obj: str,
-    master_url: str,
     iters: int = 10,
     partition_shuffles: int = 1,
     verbose: int = 1,
@@ -223,6 +226,7 @@ def train_distributed(
 
     :return: The train dict.
     """
+    master_url = retrieve_url()
 
     torch_loaded, params = load_base_torch(torch_obj)
 

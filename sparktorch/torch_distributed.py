@@ -297,7 +297,6 @@ class SparkTorch(
             state_dict = train_distributed(
                 rdd=rdd,
                 torch_obj=torch_obj,
-                master_url=master_url,
                 iters=iters,
                 partition_shuffles=1,
                 verbose=verbose,
