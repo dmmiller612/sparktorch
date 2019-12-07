@@ -56,6 +56,7 @@ def process_generic_model(params: List, iters: int, has_early_stop: bool = False
             dist.all_reduce(z, op=torch.distributed.ReduceOp.SUM)
 
         if has_early_stop:
+            dist.all_reduce(torch.tensor(0.0), op=torch.distributed.ReduceOp.SUM)
             zeros = torch.zeros(1)
             dist.all_reduce(zeros, op=torch.distributed.ReduceOp.SUM)
             if zeros.item() > 0:
@@ -160,6 +161,7 @@ def handle_model(
 
         # Process validation loss
         val_loss = None
+        val_loss_v = None
         if x_val is not None:
             pred_val = model(x_val)
 
@@ -169,7 +171,7 @@ def handle_model(
                 y_val = torch.flatten(y_val.long())
                 val_loss = criterion(pred_val, y_val)
 
-            val_loss = val_loss.item()
+            val_loss_v = val_loss.item()
 
         # Calculate gradients
         loss.backward()
@@ -180,9 +182,13 @@ def handle_model(
             param.grad.data /= (world_size-1)
 
         # Processes the early stop work
+        loss_distributed = None
         if has_early_stop:
-            loss_to_use = val_loss if val_loss is not None else loss_v
-            stop = es.step(loss_to_use)
+            loss_to_use = val_loss if val_loss is not None else loss
+
+            dist.all_reduce(loss_to_use, op=torch.distributed.ReduceOp.SUM)
+            loss_distributed = loss_to_use.item() / (world_size - 1)
+            stop = es.step(loss_distributed)
             if stop:
                 should_stop = should_stop + 1.0
 
@@ -193,7 +199,9 @@ def handle_model(
         optimizer.step()
 
         if verbose:
-            print(f"Partition: {partition_id}. Iteration: {i}. Loss: {loss_v}, Val Loss: {val_loss}")
+            print(f"Partition: {partition_id}. Iteration: {i}. Distributed Loss: {loss_distributed} "
+                  f"Partition Training Loss: {loss_v}, "
+                  f"Partition Validation Loss: {val_loss_v}")
 
     return [model.state_dict()]
 

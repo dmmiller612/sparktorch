@@ -65,6 +65,21 @@ def network_with_params():
     )
 
 
+def test_early_stopping_async(data, general_model):
+    stm = SparkTorch(
+        inputCol='features',
+        labelCol='label',
+        predictionCol='predictions',
+        torchObj=general_model,
+        iters=25,
+        verbose=1,
+        earlyStopPatience=2
+    ).fit(data)
+
+    res = stm.transform(data).take(1)
+    assert 'predictions' in res[0]
+
+
 def test_model_parameters(data, network_with_params):
     stm = SparkTorch(
         inputCol='features',
@@ -110,22 +125,6 @@ def test_lazy(lazy_model, data):
         predictionCol='predictions',
         torchObj=lazy_model,
         verbose=1,
-        iters=5
-    ).fit(data)
-
-    res = stm.transform(data).take(1)
-    assert 'predictions' in res[0]
-    assert type(res[0]['predictions']) is float
-
-
-def test_simple_hogwild(data, sequential_model):
-    stm = SparkTorch(
-        inputCol='features',
-        labelCol='label',
-        predictionCol='predictions',
-        torchObj=sequential_model,
-        verbose=1,
-        mode='hogwild',
         iters=5
     ).fit(data)
 
@@ -213,21 +212,6 @@ def test_classification(data):
         iters=5,
         verbose=1,
         partitions=2
-    ).fit(data)
-
-    res = stm.transform(data).take(1)
-    assert 'predictions' in res[0]
-
-
-def test_early_stopping_async(data, general_model):
-    stm = SparkTorch(
-        inputCol='features',
-        labelCol='label',
-        predictionCol='predictions',
-        torchObj=general_model,
-        iters=25,
-        verbose=1,
-        earlyStopPatience=2
     ).fit(data)
 
     res = stm.transform(data).take(1)
