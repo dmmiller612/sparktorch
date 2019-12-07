@@ -17,64 +17,63 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from sparktorch.util import handle_features, load_torch_model, DataObj, load_base_torch
-from sparktorch.early_stopper import EarlyStopping
-from pyspark.rdd import RDD
-from typing import Dict, List, Union
-from uuid import uuid4
-import numpy as np
-from pyspark.rdd import PipelinedRDD
-import torch
-from torch.multiprocessing import Process
-import torch.distributed as dist
-from socket import gethostbyname, gethostname
-
 import os
+from typing import Dict, List, Union, Callable
+from uuid import uuid4
+
+import numpy as np
+import torch
+import torch.distributed as dist
+from pyspark.rdd import PipelinedRDD
+from pyspark.rdd import RDD
+from pyspark.taskcontext import BarrierTaskContext
+
+from sparktorch.early_stopper import EarlyStopping
+from sparktorch.util import handle_features, load_torch_model, DataObj, load_base_torch
 
 
-def retrieve_url() -> str:
-    return os.environ.get("SPARK_LOCAL_IP", gethostbyname(gethostname()))
+def get_available_port_port(address: str, context: BarrierTaskContext) -> int:
+    port = ""
+    if context.partitionId() == 0:
+        try:
+            import socket
+
+            sock = socket.socket()
+            sock.bind((address, 0))
+            port = sock.getsockname()[1]
+        except socket.error:
+            pass
+    available_port = context.allGather(str(port))[0]
+    if not available_port:
+        raise RuntimeError("Failed to find free port for distributed training.")
+
+    return int(available_port)
 
 
-def mapPartitionsWithIndex(rdd, f, preservesPartitioning=False):
+def mapPartitionsWithIndex(rdd: RDD, f: Callable, preservesPartitioning: bool = False) -> PipelinedRDD:
     """
-    Temporary function for barrier map partitions.
+    Maps Partitions based off of the index.
+
+    :param rdd: A valid rdd.
+    :param f: Callable function with iterable.
+    :param preservesPartitioning: Whether or not to preserve partitioning
+
+    :return: A pipeline rdd.
     """
     return PipelinedRDD(rdd, f, preservesPartitioning, isFromBarrier=True)
-
-
-def process_generic_model(params: List, iters: int, has_early_stop: bool = False):
-    """
-    Runs a mock training with zero grads. This is due to a bug where the connection gets reset with custom new groups.
-    :param params: The params of the model
-    :param iters: Iterations.
-    """
-    # Hopefully this function can go away in newer versions.
-    for i in range(iters):
-        for p in params:
-            z = torch.zeros(p)
-            dist.all_reduce(z, op=torch.distributed.ReduceOp.SUM)
-
-        if has_early_stop:
-            dist.all_reduce(torch.tensor(0.0), op=torch.distributed.ReduceOp.SUM)
-            zeros = torch.zeros(1)
-            dist.all_reduce(zeros, op=torch.distributed.ReduceOp.SUM)
-            if zeros.item() > 0:
-                break
 
 
 def handle_model(
     index: int,
     data: List[DataObj],
     torch_obj: Union[str, List],
-    master_url: str = '127.0.0.1',
     iters: int = 1000,
-    world_size: int = 2,
     early_stop_patience: int = -1,
     verbose: int = 1,
     mini_batch: int = -1,
     validation_pct: float = 0,
-    device: str = 'cpu'
+    device: str = 'cpu',
+    compile_mode: str = None,
 ) -> List[Dict]:
     """
     Runs the training of pytorch model, utilizing the distributed package.
@@ -82,37 +81,42 @@ def handle_model(
     :param index: Partition index. Used for registering.
     :param data: The data from the partition
     :param torch_obj: The torch object string. Needs serialized
-    :param master_url: The master url for the service.
     :param iters: The iterations for training
-    :param world_size: The amount of partitions. Typically partitions + 1 for the driver
     :param verbose: whether to log the loss or not.
     :param mini_batch: Mini batch for training
     :param validation_pct: Validation percentage.
     :param device: The pytorch device to use for training. cpu/cuda
     :param early_stop_patience: Amount of patient for early stopping. -1 means don't use early stopping.
+    :param compile_mode: Torch compile option for 2.0 only.
 
     :return: A list of the model state dictionary.
     """
-
     # If a process has already been setup on the machine, kill it.
     if dist.is_initialized():
         dist.destroy_process_group()
 
+    context = BarrierTaskContext.get()
+
+    addrs = [e.address.split(":")[0] for e in context.getTaskInfos()]
+    world_size = len(addrs)
+
     # Set up the distributed server.
-    os.environ['MASTER_ADDR'] = master_url
-    os.environ['MASTER_PORT'] = '3333'
+    os.environ['MASTER_ADDR'] = str(addrs[0])
+    os.environ['MASTER_PORT'] = str(get_available_port_port(addrs[0], context))
+    os.environ['WORLD_SIZE'] = str(len(addrs))
+    os.environ['NODE_RANK'] = str(context.partitionId())
+    os.environ['RANK'] = str(context.partitionId())
 
-    dist.init_process_group('gloo', rank=index + 1, world_size=world_size)
+    dist.init_process_group('gloo', rank=index, world_size=world_size)
 
-    # Def Load model
-    if index == -1:
-        process_generic_model(torch_obj, iters, early_stop_patience > 0)
-        return []
-    else:
-        torch_obj = load_torch_model(torch_obj)
+    torch_obj = load_torch_model(torch_obj)
 
     # Loaded the model
     model = torch_obj.model.to(device)
+
+    if compile is not None:
+        torch.compile(compile_mode)
+
     model.train()
     criterion = torch_obj.criterion
     optimizer = torch_obj.optimizer
@@ -126,11 +130,6 @@ def handle_model(
 
     # Process the data. Converts to x_train, y_train, x_val, y_val
     data_obj = handle_features(data, validation_pct)
-
-    # check if data is none. We will still need to register.
-    if data_obj is None or data_obj.x_train is None:
-        process_generic_model([list(p.shape) for p in model.parameters()], iters, early_stop_patience > 0)
-        return []
 
     # Passes all of the data
     x_train = data_obj.x_train.to(device)
@@ -179,7 +178,7 @@ def handle_model(
         # Distributed part of training.
         for param in model.parameters():
             dist.all_reduce(param.grad.data, op=torch.distributed.ReduceOp.SUM)
-            param.grad.data /= (world_size-1)
+            param.grad.data /= (world_size - 1)
 
         # Processes the early stop work
         loss_distributed = None
@@ -214,64 +213,49 @@ def train_distributed(
     verbose: int = 1,
     mini_batch: int = -1,
     validation_pct: float = 0.0,
-    world_size: int = 2,
     device: str = 'cpu',
-    early_stop_patience: int = -1
+    early_stop_patience: int = -1,
+    compile_mode: str = None,
 ) -> Dict:
     """
     Entry point to train the model in distributed fashion.
 
     :param rdd: The rdd of data to run on the model.
     :param torch_obj: The torch object as a string that includes the model and param shapes.
-    :param master_url: The main url for the driver.
     :param iters: Number of iterations for training.
-    :param partition_shuffles: Number of partition shuffles (Need to implement)
-    :param verbose: Verbosity of logs
+    :param partition_shuffles: Number of partition shuffles (Need to implement).
+    :param verbose: Verbosity of logs.
     :param mini_batch: Mini batch for each iteration of training.
-    :param validation_pct: How many items to validate
-    :param world_size: number of partitions.
-    :param device: pytorch device
+    :param validation_pct: How many items to validate.
+    :param device: pytorch device.
+    :param early_stop_patience: amount of patience for early stopping.
+    :param compile_mode: torch 2.0 compile mode.
 
     :return: The train dict.
     """
-    master_url = retrieve_url()
-
     torch_loaded, params = load_base_torch(torch_obj)
 
-    # Start the driver process.
-    p = Process(
-        target=handle_model,
-        args=(-1, None, params, master_url, iters, world_size, early_stop_patience)
-    )
-    p.start()
+    state_dict = None
+    for i in range(partition_shuffles):
 
-    try:
-        state_dict = None
-        for i in range(partition_shuffles):
+        # Run model with barrier execution mode.
+        state_dict = mapPartitionsWithIndex(
+            rdd, lambda i, x: handle_model(
+                i,
+                x,
+                torch_obj=torch_loaded,
+                iters=iters,
+                verbose=verbose,
+                mini_batch=mini_batch,
+                validation_pct=validation_pct,
+                device=device,
+                early_stop_patience=int(early_stop_patience + 0),
+                compile_mode=compile_mode,
+            )
+        ).collect()
 
-            # Run model with barrier execution mode.
-            state_dict = mapPartitionsWithIndex(
-                rdd, lambda i, x: handle_model(
-                    i,
-                    x,
-                    torch_obj=torch_loaded,
-                    master_url=master_url,
-                    iters=iters,
-                    verbose=verbose,
-                    mini_batch=mini_batch,
-                    validation_pct=validation_pct,
-                    world_size=world_size,
-                    device=device,
-                    early_stop_patience=int(early_stop_patience+0)
-                )
-            ).collect()
+        if partition_shuffles - i > 1:
+            num_partitions = rdd.getNumPartitions()
+            rdd = rdd.repartition(num_partitions)
 
-            if partition_shuffles - i > 1:
-                num_partitions = rdd.getNumPartitions()
-                rdd = rdd.repartition(num_partitions)
-
-        return state_dict[0]
-
-    finally:
-        p.terminate()
-        p.join()
+    return state_dict[0]

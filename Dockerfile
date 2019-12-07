@@ -1,6 +1,6 @@
 FROM ubuntu:18.04
 
-ARG PYTHON_VERSION=3.6
+ARG PYTHON_VERSION=3.8
 
 RUN apt-get update && \
     apt-get install -y wget bzip2 build-essential openjdk-8-jdk ssh sudo && \
@@ -20,15 +20,15 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.5.11-Linux-x86
 
 ENV PYTHON_VERSION $PYTHON_VERSION
 COPY ./environment.yml /tmp/environment.yml
-RUN /opt/conda/bin/conda create -n sparktorch python=3.6 && \
+RUN /opt/conda/bin/conda create -n sparktorch python=3.8 && \
     /opt/conda/bin/conda env update -n sparktorch -f /tmp/environment.yml && \
     echo "conda activate sparktorch" >> ~/.bashrc
 
 # Install Spark and update env variables.
 ENV SCALA_VERSION 2.11.8
-ENV SPARK_VERSION 2.4.4
+ENV SPARK_VERSION 3.2.3
 ENV SPARK_BUILD "spark-${SPARK_VERSION}-bin-hadoop2.7"
-ENV SPARK_BUILD_URL "https://dist.apache.org/repos/dist/release/spark/spark-2.4.4/spark-2.4.4-bin-hadoop2.7.tgz"
+ENV SPARK_BUILD_URL "https://dist.apache.org/repos/dist/release/spark/spark-3.2.3/spark-3.2.3-bin-hadoop2.7.tgz"
 
 RUN wget --quiet $SPARK_BUILD_URL -O /tmp/spark.tgz && \
     tar -C /opt -xf /tmp/spark.tgz && \

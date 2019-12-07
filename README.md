@@ -2,6 +2,9 @@
 
 [![Build Status](https://travis-ci.com/dmmiller612/sparktorch.svg?branch=master)](https://travis-ci.org/dmmiller612/sparktorch)
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg?maxAge=2592000)](https://github.com/dmmiller612/sparktorch)
+<img src="https://img.shields.io/pypi/v/sparktorch.svg" />
+
+![SparkTorch](images/sparktorchi.png)
 
 This is an implementation of Pytorch on Apache Spark. The goal of this library is to provide a simple, understandable interface 
 in distributing the training of your Pytorch model on Spark. With SparkTorch, you can easily integrate your deep 

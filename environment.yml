@@ -8,24 +8,19 @@ channels:
 - pytorch
 dependencies:
 # runtime
-- six=1.11.0
-- pandas=0.23.4
-- h5py=2.8.0
-- pillow=4.1.1
+- six
+- pandas
+- h5py
+- pillow
 - dill
-- pytorch=1.3.1
+- pytorch=2.0.0
 - flask
 - requests
 # test
-- coverage=4.5.1
-- nose=1.3.7
-- parameterized=0.6.1
-- pylint=1.8.4
-- argcomplete=1.9.4
-- PyYAML=3.13
+- coverage
+- nose
 - pip:
   # test
-  - prospector==0.12.11
-  - argh==0.26.2
-  - yapf==0.21.0
+  - yapf
+  - py4j
   - pytest
