@@ -1,11 +1,12 @@
-import dill
-from pyspark.ml import Pipeline, PipelineModel
-from pyspark.ml.util import JavaMLReader, JavaMLWriter
-from pyspark.ml.feature import StopWordsRemover
-from pyspark.ml.wrapper import JavaParams
-from pyspark.context import SparkContext
-import zlib
 import sys
+import zlib
+
+import dill
+from pyspark.context import SparkContext
+from pyspark.ml import Pipeline, PipelineModel
+from pyspark.ml.feature import StopWordsRemover
+from pyspark.ml.util import JavaMLReader, JavaMLWriter
+from pyspark.ml.wrapper import JavaParams
 
 """
 based off below stackoverflow thread. Changes were made for performance.

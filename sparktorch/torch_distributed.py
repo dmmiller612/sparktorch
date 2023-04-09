@@ -17,27 +17,28 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from sparktorch.pipeline_util import PysparkReaderWriter
-from sparktorch.util import DataObj, load_torch_model
-from sparktorch.server import Server
-from sparktorch.hogwild import train, get_main
-from sparktorch.distributed import train_distributed
+import codecs
+import time
+
+import dill
 import numpy as np
 import torch
-import codecs
-
+from pyspark import SparkContext
+from pyspark import keyword_only
+from pyspark.ml import Model
+from pyspark.ml.base import Estimator
+from pyspark.ml.linalg import VectorUDT, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasPredictionCol, HasLabelCol
-from pyspark.ml.base import Estimator
-from pyspark.ml import Model
 from pyspark.ml.util import Identifiable, MLReadable, MLWritable
-from pyspark import keyword_only
-import time
 from pyspark.sql import functions as F
-import dill
 from pyspark.sql.types import DoubleType
-from pyspark.ml.linalg import VectorUDT, Vectors
-from pyspark import SparkContext
+
+from sparktorch.distributed import train_distributed
+from sparktorch.hogwild import train, get_main
+from sparktorch.pipeline_util import PysparkReaderWriter
+from sparktorch.server import Server
+from sparktorch.util import DataObj, load_torch_model
 
 
 def handle_data(input_col, label_col):
@@ -66,7 +67,7 @@ class SparkTorchModel(Model, HasInputCol, HasPredictionCol, PysparkReaderWriter,
         inputCol=None,
         predictionCol=None,
         modStr=None,
-        useVectorOut=None
+        useVectorOut=None,
     ):
         super().__init__()
         self._setDefault(
@@ -84,7 +85,7 @@ class SparkTorchModel(Model, HasInputCol, HasPredictionCol, PysparkReaderWriter,
         inputCol=None,
         predictionCol=None,
         modStr=None,
-        useVectorOut=None
+        useVectorOut=None,
     ):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -115,8 +116,10 @@ class SparkTorchModel(Model, HasInputCol, HasPredictionCol, PysparkReaderWriter,
             model = model_broadcast.value
             model.eval()
             raw_prediction = model(x_data).detach().numpy().flatten()
+
             if len(raw_prediction) > 1:
                 return float(np.argmax(raw_prediction))
+
             return float(raw_prediction[0])
 
         if use_vector_out:
@@ -137,7 +140,6 @@ class SparkTorch(
     MLWritable,
     Identifiable
 ):
-
     torchObj = Param(Params._dummy(), "torchObj", "The serialized torch object", typeConverter=TypeConverters.toString)
     mode = Param(Params._dummy(), "mode", "The training mode", typeConverter=TypeConverters.toString)
     device = Param(Params._dummy(), "device", "", typeConverter=TypeConverters.toString)
@@ -152,6 +154,7 @@ class SparkTorch(
     earlyStopPatience = Param(Params._dummy(), "earlyStopPatience", "", typeConverter=TypeConverters.toInt)
     miniBatch = Param(Params._dummy(), "miniBatch", "", typeConverter=TypeConverters.toInt)
     validationPct = Param(Params._dummy(), "validationPct", "", typeConverter=TypeConverters.toFloat)
+    compileMode = Param(Params._dummy(), "compileMode", "", typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(
@@ -172,7 +175,8 @@ class SparkTorch(
         miniBatch=None,
         validationPct=None,
         mode=None,
-        device=None
+        device=None,
+        compileMode=None,
     ):
         super().__init__()
         self._setDefault(
@@ -192,7 +196,8 @@ class SparkTorch(
             miniBatch=-1,
             validationPct=0.0,
             mode='synchronous',
-            device='cpu'
+            device='cpu',
+            compileMode=None,
         )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -216,7 +221,8 @@ class SparkTorch(
         miniBatch=None,
         validationPct=None,
         mode=None,
-        device=None
+        device=None,
+        compileMode=None,
     ):
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -263,6 +269,9 @@ class SparkTorch(
     def getDevice(self):
         return self.getOrDefault(self.device)
 
+    def getCompileMode(self):
+        return self.getOrDefault(self.compileMode)
+
     def _fit(self, dataset):
         inp_col = self.getInputCol()
         label = self.getLabelCol()
@@ -282,6 +291,7 @@ class SparkTorch(
         validation_pct = self.getValidationPct()
         mode = self.getMode()
         device = self.getDevice()
+        compile_mode = self.getCompileMode()
 
         rdd = dataset.rdd.mapPartitions(handle_data(inp_col, label))
 
@@ -289,8 +299,6 @@ class SparkTorch(
             rdd = rdd.repartition(partitions)
 
         partitions = partitions if partitions > 0 else rdd.getNumPartitions()
-
-        master_url = SparkContext._active_spark_context.getConf().get("spark.driver.host").__str__()
 
         if mode == 'synchronous':
 
@@ -302,12 +310,13 @@ class SparkTorch(
                 verbose=verbose,
                 mini_batch=mini_batch,
                 validation_pct=validation_pct,
-                world_size=partitions+1,
                 device=device,
-                early_stop_patience=early_stop_patience
+                early_stop_patience=early_stop_patience,
+                compile_mode=compile_mode,
             )
 
         elif mode == 'hogwild':
+            master_url = SparkContext._active_spark_context.getConf().get("spark.driver.host").__str__()
 
             if barrier:
                 rdd = rdd.barrier()

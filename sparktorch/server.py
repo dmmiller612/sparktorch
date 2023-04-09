@@ -17,15 +17,17 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-import socket
-from torch.multiprocessing import Process
-from flask import Flask, request
-import dill
-from sparktorch.util import load_torch_model, TorchObj, load_base_torch
-from sparktorch.rw_lock import RWLock
-from sparktorch.early_stopper import EarlyStopping
-
 import logging
+import socket
+
+import dill
+from flask import Flask, request
+from torch.multiprocessing import Process
+
+from sparktorch.early_stopper import EarlyStopping
+from sparktorch.rw_lock import RWLock
+from sparktorch.util import load_torch_model, TorchObj, load_base_torch
+
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 

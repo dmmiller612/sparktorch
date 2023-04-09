@@ -1,8 +1,10 @@
-from sparktorch.torch_distributed import SparkTorchModel
-import torch.nn as nn
 import codecs
+
 import dill
+import torch.nn as nn
 from pyspark.ml.pipeline import PipelineModel
+
+from sparktorch.torch_distributed import SparkTorchModel
 
 
 def convert_to_serialized_torch(network: nn.Module) -> str:
@@ -30,7 +32,6 @@ def create_spark_torch_model(
     :param useVectorOut: Determines whether the output should return a spark vector
     :return: Returns a SparkTorchModel
     """
-
     return SparkTorchModel(
         inputCol=inputCol,
         predictionCol=predictionCol,
@@ -56,6 +57,5 @@ def attach_pytorch_model_to_pipeline(
     :param useVectorOut: option to use a vector output.
     :return: a spark PipelineModel
     """
-
     spark_model = create_spark_torch_model(network, inputCol, predictionCol, useVectorOut)
     return PipelineModel(stages=[pipeline_model, spark_model])

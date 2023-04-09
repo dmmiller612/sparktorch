@@ -17,15 +17,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import codecs
+import collections
+import json
+from typing import Any, Dict, List, Type, Tuple
+
+import dill
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim.optimizer import Optimizer
-import json
-import dill
-from typing import Any, Dict, List, Type, Tuple
-import collections
-import codecs
 
 TorchObj = collections.namedtuple(
     'TorchObj', ['model', 'criterion', 'optimizer', 'optimizer_params', 'is_lazy', 'model_parameters']
