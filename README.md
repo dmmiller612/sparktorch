@@ -6,10 +6,10 @@
 
 ![SparkTorch](images/sparktorchi.png)
 
-This is an implementation of Pytorch on Apache Spark. The goal of this library is to provide a simple, understandable interface 
-in distributing the training of your Pytorch model on Spark. With SparkTorch, you can easily integrate your deep 
+This is an implementation of PyTorch on Apache Spark. The goal of this library is to provide a simple, understandable interface 
+in distributing the training of your PyTorch model on Spark. With SparkTorch, you can easily integrate your deep 
 learning model with a ML Spark Pipeline. Underneath the hood, SparkTorch offers two distributed training approaches 
-through tree reductions and a parameter server. Through the api, the user can specify the style of training, whether 
+through tree reductions and a parameter server. Through the API, the user can specify the style of training, whether 
 that is distributed synchronous or hogwild.
 
 ## Why should I use this?
@@ -89,7 +89,7 @@ make docker-run-dnn
 make docker-run-cnn
 ```
 
-For the cnn example, you will need to give your docker container at least 8gb of memory.
+For the CNN example, you will need to give your docker container at least 8GB of memory.
 
 ## Documentation
 
@@ -166,8 +166,8 @@ device: Supply 'cpu' or 'cuda'
 
 #### Saving and Loading Pipelines
 
-Since saving and loading custom ML Transformers in pure python has not been implemented in PySpark, an extension has been
-added here to make that possible. In order to save a Pyspark Pipeline with Apache Spark, one will need to use the overwrite function:
+Since saving and loading custom ML Transformers in pure Python has not been implemented in PySpark, an extension has been
+added here to make that possible. In order to save a PySpark Pipeline with Apache Spark, one will need to use the overwrite function:
 
 ```python
 p = Pipeline(stages=[va, encoded, spark_model]).fit(df)
@@ -182,15 +182,15 @@ from pyspark.ml.pipeline import PipelineModel
 
 p = PysparkPipelineWrapper.unwrap(PipelineModel.load('location'))
 ``` 
-Then you can perform predictions, etc with:
+Then you can perform predictions, etc. with:
 
 ```python
 predictions = p.transform(df)
 ```
 
-#### Getting the Pytorch model from the training session
+#### Getting the PyTorch model from the training session
 
-If you just want to get the Pytorch model after training, you can execute the following code:
+If you just want to get the PyTorch model after training, you can execute the following code:
 
 ```python
 stm = SparkTorch(
@@ -206,9 +206,9 @@ py_model = stm.getPytorchModel()
 ```
 
 
-#### Using a pretrained Pytorch model for inference
+#### Using a pretrained PyTorch model for inference
 
-If you already have a trained Pytorch model, you can attach it your existing pipeline by directly creating a SparkTorchModel. 
+If you already have a trained PyTorch model, you can attach it your existing pipeline by directly creating a SparkTorchModel. 
 This can be done by running the following:
 
 ```python
@@ -225,16 +225,16 @@ spark_torch_model = create_spark_torch_model(
 
 ## Running
 
-One big thing to remember is to add the `--executor cores 1` option to spark to ensure
-each executor is only training one copy of the network. This will especially be needed for gpu training.
+One big thing to remember is to add the `--executor cores 1` option to Spark to ensure
+each executor is only training one copy of the network. This will especially be needed for GPU training.
 
 ## Contributing
 
 Contributions are always welcome. This could be fixing a bug, changing documentation, or adding a new feature. To test 
-new changes against existing tests, we have provided a Docker container which takes in an argument of the python version. 
-This allows the user to check their work before pushing to Github, where travis-ci will run.
+new changes against existing tests, we have provided a Docker container which takes in an argument of the Python version. 
+This allows the user to check their work before pushing to GitHub, where travis-ci will run.
 
-For python 3.6
+For Python 3.6
 ```
 docker build -t local-test --build-arg PYTHON_VERSION=3.6 .
 docker run --rm local-test:latest bash -i -c "pytest"
