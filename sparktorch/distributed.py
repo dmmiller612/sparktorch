@@ -114,7 +114,7 @@ def handle_model(
     # Loaded the model
     model = torch_obj.model.to(device)
 
-    if compile is not None:
+    if compile_mode is not None:
         torch.compile(compile_mode)
 
     model.train()
