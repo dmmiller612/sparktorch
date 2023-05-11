@@ -2,11 +2,11 @@ from setuptools import setup
 from setuptools import find_packages
 
 setup(name='sparktorch',
-      version='0.1.2',
+      version='0.2.0',
       description='Distributed training of PyTorch networks on Apache Spark with ML Pipeline support',
-      keywords = ['pytorch', 'spark', 'sparktorch', 'machine learning', 'deep learning'],
+      keywords=['pytorch', 'spark', 'sparktorch', 'machine learning', 'deep learning'],
       url='https://github.com/dmmiller612/sparktorch',
-      download_url='https://github.com/dmmiller612/sparktorch/archive/0.1.2.tar.gz',
+      download_url='https://github.com/dmmiller612/sparktorch/archive/0.2.0.tar.gz',
       author='Derek Miller',
       author_email='dmmiller612@gmail.com',
       long_description=open("README.md", "r", encoding='utf-8').read(),

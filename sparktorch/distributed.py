@@ -114,7 +114,7 @@ def handle_model(
     # Loaded the model
     model = torch_obj.model.to(device)
 
-    if compile is not None:
+    if compile_mode is not None:
         torch.compile(compile_mode)
 
     model.train()
@@ -178,7 +178,7 @@ def handle_model(
         # Distributed part of training.
         for param in model.parameters():
             dist.all_reduce(param.grad.data, op=torch.distributed.ReduceOp.SUM)
-            param.grad.data /= (world_size - 1)
+            param.grad.data /= world_size
 
         # Processes the early stop work
         loss_distributed = None
@@ -186,7 +186,7 @@ def handle_model(
             loss_to_use = val_loss if val_loss is not None else loss
 
             dist.all_reduce(loss_to_use, op=torch.distributed.ReduceOp.SUM)
-            loss_distributed = loss_to_use.item() / (world_size - 1)
+            loss_distributed = loss_to_use.item() / world_size
             stop = es.step(loss_distributed)
             if stop:
                 should_stop = should_stop + 1.0
@@ -223,7 +223,7 @@ def train_distributed(
     :param rdd: The rdd of data to run on the model.
     :param torch_obj: The torch object as a string that includes the model and param shapes.
     :param iters: Number of iterations for training.
-    :param partition_shuffles: Number of partition shuffles (Need to implement).
+    :param partition_shuffles: Number of partition shuffles.
     :param verbose: Verbosity of logs.
     :param mini_batch: Mini batch for each iteration of training.
     :param validation_pct: How many items to validate.
